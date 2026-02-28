@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+data/xybitz.db
+data/xybitz.db-wal
+data/xybitz.db-shm
+.pytest_cache/
+htmlcov/
+.coverage
+dist/
+build/
+*.egg-info/
+.DS_Store
+Thumbs.db

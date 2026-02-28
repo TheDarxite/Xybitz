@@ -1,0 +1,883 @@
+@workspace You are building "Xybitz" — a production-grade cybersecurity news aggregator
+web app. Think inshorts.com but for security practitioners. Zero cost. Fully local.
+AI-summarised. No human curation.
+
+## PRODUCT NAME
+Xybitz
+
+## OBJECTIVE
+Scaffold the COMPLETE, RUNNABLE project from scratch. I want to be able to:
+1. Run `make dev` and see the Xybitz web app in the browser
+2. See article cards with AI-generated 50-60 word summaries
+3. Filter by category tabs (HTMX-powered, no page reload)
+4. Access the admin panel at /admin with full CRUD control
+5. The scheduler auto-fetches RSS feeds on startup immediately
+
+Do NOT generate placeholders or TODOs. Every file must be complete and runnable.
+
+---
+
+## TECH STACK (FIXED — DO NOT CHANGE)
+
+- Python 3.12
+- FastAPI 0.115+
+- Jinja2 3.x (server-side templates — NO React/Vue/Angular)
+- HTMX 2.x (via CDN) — partial page updates only, zero custom JS written
+- Bootstrap 5.3 (via CDN) — cards, grid, responsive layout
+- SQLAlchemy 2.x async + aiosqlite (SQLite with WAL mode)
+- APScheduler 3.x — AsyncIOScheduler (NEVER BackgroundScheduler)
+- Ollama HTTP API (local, no SDK) — model read from settings.OLLAMA_MODEL
+- sqladmin 0.19.0 — admin dashboard at /admin
+- feedparser — RSS/Atom parsing
+- trafilatura — full article body extraction
+- httpx — async HTTP client (used for ALL LLM providers)
+- pydantic-settings v2 — typed .env config
+- pyyaml — feeds config
+- pytest + pytest-asyncio — testing
+
+---
+
+## FOLDER STRUCTURE
+
+Generate EXACTLY this structure — no extras, no missing files:
+
+```
+xybitz/
+├── app/
+│   ├── __init__.py
+│   ├── main.py
+│   ├── config.py
+│   ├── database.py
+│   ├── models.py
+│   ├── schemas.py
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── feed_ingestion.py
+│   │   ├── deduplication.py
+│   │   ├── categoriser.py
+│   │   ├── summariser.py
+│   │   └── scheduler.py
+│   ├── routers/
+│   │   ├── __init__.py
+│   │   ├── articles.py
+│   │   ├── categories.py
+│   │   └── health.py
+│   ├── admin/
+│   │   ├── __init__.py
+│   │   └── views.py
+│   ├── templates/
+│   │   ├── base.html
+│   │   ├── index.html
+│   │   ├── article_detail.html
+│   │   └── partials/
+│   │       ├── article_card.html
+│   │       ├── article_list.html
+│   │       └── category_tabs.html
+│   └── static/
+│       └── css/
+│           └── custom.css
+├── data/
+│   └── feeds.yaml
+├── tests/
+│   ├── conftest.py
+│   ├── test_categoriser.py
+│   ├── test_deduplication.py
+│   └── test_api_articles.py
+├── .env
+├── .env.example
+├── .gitignore
+├── requirements.txt
+├── Makefile
+└── README.md
+```
+
+---
+
+## app/config.py
+
+```python
+# pydantic-settings v2
+# SettingsConfigDict(env_file=".env")
+# Export singleton: settings = Settings()
+
+# All fields:
+#   APP_NAME: str = "Xybitz"
+#   DEBUG: bool = False
+#   DATABASE_URL: str = "sqlite+aiosqlite:///./data/xybitz.db"
+# LLM Provider — supports ollama | openai | groq
+#   LLM_PROVIDER: str = "ollama"
+#   OLLAMA_BASE_URL: str = "http://localhost:11434"
+#   OLLAMA_MODEL: str = "llama3.2:3b"       # read from .env at runtime
+#   OPENAI_API_KEY: str = ""
+#   OPENAI_MODEL: str = "gpt-4o-mini"
+#   GROQ_API_KEY: str = ""
+#   GROQ_MODEL: str = "llama-3.1-8b-instant"
+# SUMMARY_WORD_TARGET: int = 55
+#   FETCH_INTERVAL_MINUTES: int = 30
+#   ARTICLE_RETENTION_DAYS: int = 3         # configurable: 3 to 99999
+#   INITIAL_BACKFILL_DAYS: int = 3          # on first run, go back this many days only
+#   SUMMARISATION_CONCURRENCY: int = 3
+#   FEEDS_CONFIG_PATH: str = "./data/feeds.yaml"
+#   ADMIN_USERNAME: str = "admin"
+#   ADMIN_PASSWORD: str = "xybitz@admin"
+```
+
+---
+
+## app/models.py
+
+```python
+# SQLAlchemy 2.x ORM — mapped_column syntax throughout
+
+# Article:
+#   id: int PK autoincrement
+#   url: str unique not null
+#   url_hash: str unique (SHA-256 of canonical url)
+#   title: str
+#   source_name: str
+#   category: str
+#   published_at: datetime nullable
+#   fetched_at: datetime server_default=now
+#   raw_content: Text nullable
+#   summary: Text nullable
+#   summary_status: str default="pending"   # pending|processing|done|failed
+#   is_active: bool default=True
+#   is_featured: bool default=False
+
+# Source:
+#   id: int PK
+#   name: str
+#   url: str unique
+#   category: str
+#   source_type: str   # rss | scrape_static | scrape_js
+#   scrape_engine: str nullable
+#   list_selector: str nullable
+#   link_selector: str nullable
+#   rate_limit_seconds: int default=60
+#   is_active: bool default=True
+#   last_fetched_at: datetime nullable
+#   consecutive_failures: int default=0
+#   article_count: int default=0
+
+# Category:
+#   id: int PK
+#   slug: str unique
+#   name: str
+#   color: str  (Bootstrap color name: e.g. "danger", "primary", or hex)
+#   is_visible: bool default=True
+```
+
+---
+
+## app/database.py
+
+```python
+# SQLAlchemy 2.x async engine
+# Connection string: sqlite+aiosqlite:///
+# WAL mode via @event.listens_for(engine.sync_engine, "connect"):
+#   cursor.execute("PRAGMA journal_mode=WAL")
+#   cursor.execute("PRAGMA synchronous=NORMAL")
+# Exports:
+#   engine: AsyncEngine
+#   AsyncSessionLocal: async_sessionmaker
+#   async def get_db() -> AsyncGenerator  (FastAPI dependency)
+#   async def create_all_tables()
+```
+
+---
+
+## app/services/deduplication.py
+
+```python
+# import hashlib
+# def compute_url_hash(url: str) -> str:
+#     return hashlib.sha256(url.strip().lower().encode()).hexdigest()
+# async def is_duplicate(db: AsyncSession, url_hash: str) -> bool:
+#     result = await db.execute(select(Article).where(Article.url_hash == url_hash))
+#     return result.scalar_one_or_none() is not None
+```
+
+---
+
+## app/services/categoriser.py
+
+```python
+# Pure function — no side effects, fully unit-testable
+# def categorise(title: str, content: str) -> str
+# Check (title + content[:500]).lower() for keywords
+# Priority order matters — first match wins:
+
+# 1. ai_security:
+#    ["shadow ai", "llm attack", "ai security", "model poisoning",
+#     "prompt injection", "ai agent", "saas ai", "copilot security",
+#     "generative ai", "deepfake", "ai-generated malware"]
+
+# 2. vulnerabilities:
+#    ["cve-", "nvd", "patch tuesday", "zero-day", "zero day",
+#     "exploit", "vulnerability", "advisory", "cvss", "rce", "remote code"]
+
+# 3. malware:
+#    ["ransomware", "trojan", "botnet", "spyware", "wiper",
+#     "rat ", "dropper", "malware", "backdoor", "stealer", "rootkit"]
+
+# 4. threat_intel:
+#    ["apt", "threat actor", "campaign", "nation-state", "ioc",
+#     "ttps", "mitre att&ck", "threat intelligence", "threat group"]
+
+# 5. appsec:
+#    ["xss", "sql injection", "owasp", "api security", "web app",
+#     "sast", "dast", "burp", "penetration test", "csrf", "ssrf"]
+
+# 6. cloud_security:
+#    ["aws", "azure", "gcp", "cloud", "s3 bucket", "iam",
+#     "kubernetes", "container", "docker", "terraform", "misconfiguration"]
+
+# 7. compliance:
+#    ["gdpr", "hipaa", "pci dss", "iso 27001", "nist",
+#     "regulation", "audit", "compliance", "sox", "dora"]
+
+# 8. privacy:
+#    ["data breach", "privacy", "tracking", "surveillance",
+#     "personal data", "leak", "deanonymization", "biometric"]
+
+# Return "general" if no match
+```
+
+---
+
+## app/services/summariser.py
+
+```python
+# IMPORTANT: Uses httpx.AsyncClient for ALL providers — never any SDK
+
+# PROMPT_TEMPLATE (exact — do not modify):
+# """Summarise the following cybersecurity news article in exactly 50-60 words.
+# Write in plain English. No bullet points. No markdown. No headers.
+# Start directly with the key finding or event.
+# Article: {text}
+# Summary:"""
+
+# class OllamaSummariser:
+#   __init__: AsyncClient, settings ref, asyncio.Semaphore(SUMMARISATION_CONCURRENCY)
+# async def summarise(text: str) -> str:
+#     truncate input to first 2000 chars
+#     route by settings.LLM_PROVIDER:
+# "ollama":
+#       POST {OLLAMA_BASE_URL}/api/generate
+#       body: {"model": OLLAMA_MODEL, "prompt": ..., "stream": False}
+#       return response["response"].strip()
+# "openai":
+#       POST https://api.openai.com/v1/chat/completions
+#       headers: Authorization: Bearer {OPENAI_API_KEY}
+#       body: {"model": OPENAI_MODEL,
+#              "messages": [{"role": "user", "content": prompt}]}
+#       return response["choices"]["message"]["content"].strip()
+# "groq":
+#       POST https://api.groq.com/openai/v1/chat/completions
+#       headers: Authorization: Bearer {GROQ_API_KEY}
+#       body: same as OpenAI format, use GROQ_MODEL
+#       return response["choices"]["message"]["content"].strip()
+# timeout: 60s for all providers
+#     on error: raise SummarisationError (custom exception)
+
+# async def process_pending_articles(db: AsyncSession):
+#   query Article where summary_status="pending", limit=50
+#   immediately set status="processing" for all matched (prevents double-processing)
+#   await db.commit()
+#   use asyncio.gather with semaphore for concurrency
+#   on success: article.summary = result, article.summary_status = "done"
+#   on failure: article.summary_status = "failed"
+#   log each outcome with structured logging
+```
+
+---
+
+## app/services/feed_ingestion.py
+
+```python
+# async def ingest_all_feeds(db: AsyncSession) -> dict
+
+# Steps per feed entry:
+# 1. Load all active Source records where source_type="rss" from DB
+# 2. Run feedparser.parse(url) via loop.run_in_executor (blocking call)
+# 3. Per entry:
+#    a. Parse published_parsed → datetime with UTC tzinfo
+#    b. SKIP if published_at < (now_utc - timedelta(days=INITIAL_BACKFILL_DAYS))
+#       *** This is non-negotiable — no stale articles ***
+#    c. compute_url_hash(entry.link)
+#    d. Skip if is_duplicate(db, url_hash) returns True
+#    e. Extract full content:
+#       - try trafilatura.fetch_url(url) + trafilatura.extract(html)
+#       - fallback to entry.get("summary", "") if trafilatura returns None
+#    f. categorise(title, content) → category string
+#    g. INSERT Article(summary_status="pending")
+# 4. Update Source.last_fetched_at = now, Source.article_count += added
+# 5. On any feed error: Source.consecutive_failures += 1, log and continue
+# 6. Return dict: {feeds_processed, articles_added, articles_skipped, errors}
+
+# Feed timeout: 10s per feed (httpx or socket)
+# Never crash the whole job on a single feed failure
+```
+
+---
+
+## app/services/scheduler.py
+
+```python
+# from apscheduler.schedulers.asyncio import AsyncIOScheduler  ← ONLY this one
+
+# def create_scheduler() -> AsyncIOScheduler:
+#   scheduler = AsyncIOScheduler(timezone="UTC")
+#   scheduler.add_job(
+#       ingest_and_summarise,
+#       "interval",
+#       minutes=settings.FETCH_INTERVAL_MINUTES,
+#       id="fetch_job",
+#       replace_existing=True
+#   )
+#   scheduler.add_job(
+#       purge_old_articles,
+#       "cron",
+#       hour=2, minute=0,
+#       id="purge_job",
+#       replace_existing=True
+#   )
+#   return scheduler   # NOT started here — started in main.py lifespan
+
+# async def ingest_and_summarise():
+#   async with AsyncSessionLocal() as db:
+#       stats = await feed_ingestion.ingest_all_feeds(db)
+#       await summariser.process_pending_articles(db)
+#       logger.info(f"Cycle complete: {stats}")
+
+# async def purge_old_articles():
+#   async with AsyncSessionLocal() as db:
+#       cutoff = datetime.now(UTC) - timedelta(days=settings.ARTICLE_RETENTION_DAYS)
+#       result = await db.execute(delete(Article).where(Article.fetched_at < cutoff))
+#       await db.commit()
+#       logger.info(f"Purged {result.rowcount} old articles")
+```
+
+---
+
+## app/admin/views.py
+
+```python
+# sqladmin ModelView classes
+
+# ArticleAdmin(ModelView, model=Article):
+#   name = "Article"
+#   name_plural = "Articles"
+#   icon = "fa-solid fa-newspaper"
+#   column_list = [Article.id, Article.title, Article.source_name,
+#                  Article.category, Article.summary_status,
+#                  Article.published_at, Article.is_featured, Article.is_active]
+#   column_searchable_list = [Article.title, Article.summary, Article.source_name]
+#   column_sortable_list = [Article.published_at, Article.category, Article.summary_status]
+#   column_filters = [Article.category, Article.summary_status,
+#                     Article.is_active, Article.source_name]
+#   can_delete = True
+#   can_export = True
+#   page_size = 50
+#   page_size_options =[1][2]
+
+# SourceAdmin(ModelView, model=Source):
+#   name = "Source"
+#   icon = "fa-solid fa-rss"
+#   column_list = [Source.id, Source.name, Source.url, Source.category,
+#                  Source.source_type, Source.is_active,
+#                  Source.last_fetched_at, Source.consecutive_failures,
+#                  Source.article_count]
+#   can_create = True
+#   can_edit = True
+#   can_delete = True
+#   column_searchable_list = [Source.name, Source.url]
+
+# CategoryAdmin(ModelView, model=Category):
+#   name = "Category"
+#   icon = "fa-solid fa-tags"
+#   column_list = [Category.id, Category.slug, Category.name,
+#                  Category.color, Category.is_visible]
+#   can_create = True
+#   can_edit = True
+#   can_delete = True
+
+# AdminAuth(AuthenticationBackend):
+#   async def login(request):
+#       form = await request.form()
+#       if form["username"] == settings.ADMIN_USERNAME
+#          and form["password"] == settings.ADMIN_PASSWORD:
+#           request.session.update({"authenticated": True})
+#           return True
+#       return False
+#   async def authenticate(request):
+#       return request.session.get("authenticated", False)
+#   async def logout(request):
+#       request.session.clear()
+```
+
+---
+
+## app/main.py
+
+```python
+# FastAPI app with lifespan context manager
+
+# @asynccontextmanager
+# async def lifespan(app):
+#   --- STARTUP ---
+#   await create_all_tables()
+# Seed Category table if empty (8 categories)
+#   categories = [
+#     {"slug": "threat_intel",   "name": "Threat Intel",    "color": "purple"},
+#     {"slug": "vulnerabilities","name": "Vulnerabilities",  "color": "danger"},
+#     {"slug": "malware",        "name": "Malware",          "color": "warning"},
+#     {"slug": "appsec",         "name": "App Security",     "color": "primary"},
+#     {"slug": "cloud_security", "name": "Cloud Security",   "color": "info"},
+#     {"slug": "compliance",     "name": "Compliance",       "color": "success"},
+#     {"slug": "privacy",        "name": "Privacy",          "color": "secondary"},
+#     {"slug": "ai_security",    "name": "AI Security",      "color": "#6610f2"},
+#   ]
+# Seed Source table from feeds.yaml if empty
+#   load feeds.yaml → upsert each feed into Source table
+# scheduler = create_scheduler()
+#   scheduler.start()
+# Trigger one immediate fetch on startup (do not await — non-blocking)
+#   asyncio.create_task(ingest_and_summarise())
+# yield
+# --- SHUTDOWN ---
+#   scheduler.shutdown(wait=False)
+
+# Admin setup:
+#   auth_backend = AdminAuth(secret_key=settings.ADMIN_PASSWORD)
+#   admin = Admin(app, engine, authentication_backend=auth_backend, base_url="/admin")
+#   admin.add_view(ArticleAdmin)
+#   admin.add_view(SourceAdmin)
+#   admin.add_view(CategoryAdmin)
+
+# Routers:
+#   app.include_router(articles_router)
+#   app.include_router(categories_router, prefix="/api/v1")
+#   app.include_router(health_router)
+
+# Static files:
+#   app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+# Middleware:
+#   Request logging: log method, path, status_code, duration_ms on every request
+
+# Global 500 handler:
+#   return JSONResponse({"error": str(exc), "status": 500}, status_code=500)
+```
+
+---
+
+## app/routers/articles.py
+
+```python
+# GET / → render index.html
+#   query: Article where is_active=True, summary_status="done"
+#   order: published_at DESC
+#   paginate: page=1, limit=20
+#   context: articles, categories (all visible), current_category="all",
+#            total_today (articles fetched today count), pagination_meta
+
+# GET /articles
+#   params: category (str optional), search (str optional),
+#           page (int default=1), limit (int default=20)
+#   if "HX-Request" in request.headers:
+#       return TemplateResponse("partials/article_list.html", context)
+#   else:
+#       return TemplateResponse("index.html", context)
+#   DB filter: is_active=True, summary_status="done"
+#             + category filter if provided
+#             + LIKE search on title OR summary if search provided
+#   order: published_at DESC
+
+# GET /articles/{id}
+#   return TemplateResponse("article_detail.html", {"article": article})
+#   404 if not found or is_active=False
+```
+
+---
+
+## app/routers/health.py
+
+```python
+# GET /health
+# Returns JSON:
+# {
+#   "status": "ok"|"degraded",
+#   "ollama": "online"|"offline",
+#   "ollama_model": settings.OLLAMA_MODEL,
+#   "llm_provider": settings.LLM_PROVIDER,
+#   "db": "ok"|"error",
+#   "articles_total": int,
+#   "articles_pending_summary": int,
+#   "articles_failed_summary": int,
+#   "scheduler": "running"|"stopped",
+#   "last_fetch": ISO datetime string or null
+# }
+# Check Ollama: GET {OLLAMA_BASE_URL}/api/tags with 3s timeout
+# status = "degraded" if ollama="offline" or db="error"
+```
+
+---
+
+## app/templates/base.html
+
+```html
+<!-- Complete Jinja2 base template -->
+
+<!-- HEAD:
+  - charset UTF-8, viewport meta
+  - title: "{{ page_title | default('Latest') }} — Xybitz"
+  - meta description: "CyberSec news AI-summarised to 60 words. Always current."
+  - Bootstrap 5.3 CSS CDN
+  - HTMX 2.x CDN
+  - Font Awesome 6 CDN (for admin icons + UI)
+  - /static/css/custom.css
+-->
+
+<!-- BODY: hx-boost="true" for progressive enhancement
+
+  NAVBAR (navbar-dark bg-dark sticky-top):
+  - Brand left: "🔐 Xybitz"
+    - Sub-tagline below brand: "CyberSec · AI-Summarised · Always Current"
+  - Nav links right: Home (/), Admin (/admin), Health (/health)
+  - Navbar collapse on mobile (hamburger)
+
+  MAIN:
+  <main class="container-fluid px-4 py-3">
+    {% block content %}{% endblock %}
+  </main>
+
+  FOOTER (bg-dark text-light text-center py-3 mt-5):
+  "Powered by Ollama · llama3.2:3b · Built locally · Zero cost"
+  "© 2026 Xybitz — CyberSec News AI-Summarised"
+-->
+```
+
+---
+
+## app/templates/index.html
+
+```html
+<!-- Extends base.html -->
+<!-- block content:
+
+  1. HERO STRIP (slim, bg-dark text-white py-2 mb-3):
+     "Stay current. 50-word summaries. Zero noise."
+     Small badge: "{{ total_today }} articles today"
+
+  2. CATEGORY TABS (Bootstrap nav nav-tabs mb-3):
+     Tab items:
+     - "All" → hx-get="/articles" hx-target="#article-grid" hx-swap="innerHTML"
+     - One tab per visible Category in categories list
+     - hx-get="/articles?category={{ cat.slug }}"
+     - hx-target="#article-grid"
+     - hx-swap="innerHTML"
+     - hx-push-url="true"
+     - Active class on current_category match
+     - Include hidden input: <input type="hidden" name="category" value="{{ current_category }}">
+
+  3. SEARCH BAR (mb-3):
+     <input type="text" name="search"
+       hx-get="/articles"
+       hx-trigger="keyup changed delay:400ms"
+       hx-target="#article-grid"
+       hx-swap="innerHTML"
+       hx-include="[name='category']"
+       class="form-control"
+       placeholder="Search articles, CVEs, threat actors...">
+
+  4. ARTICLE GRID:
+     <div id="article-grid">
+       {% include "partials/article_list.html" %}
+     </div>
+-->
+```
+
+---
+
+## app/templates/partials/article_card.html
+
+```html
+<!-- Bootstrap card for ONE article (receives `article` variable) -->
+
+<!--
+  CARD (h-100 shadow-sm border-0 mb-3):
+
+  CARD-HEADER (d-flex justify-content-between align-items-center):
+  - Left: category badge
+    Color map:
+      threat_intel   → bg-purple   (custom, #6f42c1)
+      vulnerabilities→ bg-danger
+      malware        → bg-warning text-dark
+      appsec         → bg-primary
+      cloud_security → bg-info text-dark
+      compliance     → bg-success
+      privacy        → bg-secondary
+      ai_security    → custom bg (#6610f2) text-white
+      general        → bg-dark
+    Badge text: category slug humanised (replace _ with space, title case)
+  - Right: source_name (text-muted small) + published_at relative
+    (e.g. "2 hours ago", "1 day ago" — use Jinja2 filter or JS-free approximation)
+
+  CARD-BODY:
+  - h6: <a href="/articles/{{ article.id }}" class="text-decoration-none text-dark">
+      {{ article.title }}
+    </a>
+  - Summary block:
+    if article.summary_status == "done":
+      <p class="card-text small text-muted">{{ article.summary }}</p>
+    elif article.summary_status in ["pending", "processing"]:
+      <p class="card-text small text-muted fst-italic">
+        <span class="spinner-border spinner-border-sm"></span>
+        Summarising...
+      </p>
+    else: (failed)
+      <p class="card-text small text-danger fst-italic">Summary unavailable</p>
+
+  CARD-FOOTER (bg-transparent border-0 pt-0):
+  - <a href="{{ article.url }}" target="_blank" rel="noopener noreferrer"
+       class="btn btn-outline-secondary btn-sm">
+      Read original →
+    </a>
+  - If article.is_featured: show ⭐ badge
+
+  GRID WRAPPER: col-xl-4 col-lg-6 col-md-6 col-sm-12
+-->
+```
+
+---
+
+## app/templates/partials/article_list.html
+
+```html
+<!--
+  Receives: articles (list), pagination_meta (dict), current_category, search
+
+  If articles is empty:
+    <div class="col-12 text-center py-5">
+      <p class="text-muted fs-5">No articles found. Check back soon.</p>
+      <small class="text-muted">RSS feeds refresh every 30 minutes</small>
+    </div>
+
+  Else:
+    <div class="row g-3">
+      {% for article in articles %}
+        {% include "partials/article_card.html" %}
+      {% endfor %}
+    </div>
+
+  PAGINATION (Bootstrap pagination, mt-4):
+    Previous button:
+      hx-get="/articles?page={{ pagination_meta.prev_page }}&category={{ current_category }}&search={{ search }}"
+      hx-target="#article-grid" hx-swap="innerHTML"
+      disabled if pagination_meta.page == 1
+
+    Page numbers (show max 5 around current):
+      hx-get="/articles?page={n}&category=..."
+      hx-target="#article-grid" hx-swap="innerHTML"
+
+    Next button:
+      hx-get="/articles?page={{ pagination_meta.next_page }}&..."
+      disabled if pagination_meta.page == pagination_meta.total_pages
+-->
+```
+
+---
+
+## app/templates/article_detail.html
+
+```html
+<!-- Extends base.html -->
+<!--
+  Full article view:
+  - Breadcrumb: Home > {{ article.category }} > Article
+  - Title (h2)
+  - Meta row: source | category badge | published_at
+  - Summary card (highlighted, bg-light border-start border-primary border-3 p-3):
+    "AI Summary" label
+    {{ article.summary }}
+  - "Read Full Article" button → article.url (new tab)
+  - Back link → /
+-->
+```
+
+---
+
+## app/static/css/custom.css
+
+```css
+/* Xybitz custom styles — minimal overrides on Bootstrap 5.3 */
+
+/* Purple badge for threat_intel */
+.bg-purple { background-color: #6f42c1 !important; color: white; }
+
+/* AI Security indigo */
+.bg-ai-security { background-color: #6610f2 !important; color: white; }
+
+/* Card hover lift effect */
+.card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.card:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important; }
+
+/* Navbar brand tagline */
+.navbar-tagline { font-size: 0.65rem; opacity: 0.7; display: block; }
+
+/* Hero strip */
+.hero-strip { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); }
+
+/* Article summary text */
+.summary-text { line-height: 1.6; color: #495057; }
+
+/* Spinner container */
+.summarising { opacity: 0.6; }
+
+/* Category tab active state */
+.nav-tabs .nav-link.active { font-weight: 600; }
+
+/* Footer */
+footer { font-size: 0.8rem; opacity: 0.8; }
+
+/* Search focus */
+#search-input:focus { box-shadow: 0 0 0 0.2rem rgba(102, 16, 242, 0.25); border-color: #6610f2; }
+```
+
+---
+
+## data/feeds.yaml
+
+```yaml
+feeds:
+  # ── THREAT INTEL ───────────────────────────────────────────────
+  - {name: "The Hacker News",   url: "https://feeds.feedburner.com/TheHackersNews",  category: threat_intel, type: rss}
+  - {name: "Dark Reading",      url: "https://www.darkreading.com/rss.xml",           category: threat_intel, type: rss}
+  - {name: "Krebs on Security", url: "https://krebsonsecurity.com/feed/",             category: threat_intel, type: rss}
+  - {name: "CyberScoop",        url: "https://cyberscoop.com/feed/",                 category: threat_intel, type: rss}
+  - {name: "The Cyber Express", url: "https://thecyberexpress.com/feed/",             category: threat_intel, type: rss}
+  - {name: "GBHackers",         url: "https://gbhackers.com/feed/",                  category: threat_intel, type: rss}
+  - {name: "Cybernews",         url: "https://cybernews.com/feed/",                  category: threat_intel, type: rss}
+
+  # ── VULNERABILITIES ────────────────────────────────────────────
+  - {name: "CISA Alerts",   url: "https://www.cisa.gov/cybersecurity-advisories/all.xml",  category: vulnerabilities, type: rss}
+  - {name: "NVD CVE Feed",  url: "https://nvd.nist.gov/feeds/xml/cve/misc/nvd-rss.xml",    category: vulnerabilities, type: rss}
+  - {name: "SecurityWeek",  url: "https://feeds.feedburner.com/Securityweek",               category: vulnerabilities, type: rss}
+
+  # ── MALWARE ────────────────────────────────────────────────────
+  - {name: "Bleeping Computer",       url: "https://www.bleepingcomputer.com/feed/",          category: malware, type: rss}
+  - {name: "We Live Security (ESET)", url: "https://www.welivesecurity.com/en/rss/feed/",     category: malware, type: rss}
+  - {name: "Sophos News",             url: "https://news.sophos.com/en-us/feed/",             category: malware, type: rss}
+  - {name: "Cyble Blog",              url: "https://cyble.com/feed/",                         category: malware, type: rss}
+
+  # ── APP SECURITY ───────────────────────────────────────────────
+  - {name: "Google Project Zero", url: "https://googleprojectzero.blogspot.com/feeds/posts/default", category: appsec, type: rss}
+  - {name: "PortSwigger",         url: "https://portswigger.net/blog/rss",                          category: appsec, type: rss}
+
+  # ── CLOUD SECURITY ─────────────────────────────────────────────
+  - {name: "Wiz Security Blog",  url: "https://www.wiz.io/feed/rss.xml",                   category: cloud_security, type: rss}
+  - {name: "AWS Security Blog",  url: "https://aws.amazon.com/blogs/security/feed/",        category: cloud_security, type: rss}
+  - {name: "Palo Alto Networks", url: "https://feeds.feedburner.com/PaloAltoNetworksBlog",  category: cloud_security, type: rss}
+
+  # ── COMPLIANCE ─────────────────────────────────────────────────
+  - {name: "Schneier on Security", url: "https://www.schneier.com/feed/atom/",                     category: compliance, type: rss}
+  - {name: "NIST Cybersecurity",   url: "https://www.nist.gov/blogs/cybersecurity-insights/rss.xml", category: compliance, type: rss}
+
+  # ── PRIVACY ────────────────────────────────────────────────────
+  - {name: "Graham Cluley",              url: "https://grahamcluley.com/feed/",                                      category: privacy, type: rss}
+  - {name: "Troy Hunt",                  url: "https://www.troyhunt.com/rss/",                                       category: privacy, type: rss}
+  - {name: "The Guardian Data Security", url: "https://www.theguardian.com/technology/data-computer-security/rss",   category: privacy, type: rss}
+
+  # ── AI SECURITY ────────────────────────────────────────────────
+  - {name: "Reco AI Blog",           url: "https://www.reco.ai/blog/rss.xml",                       category: ai_security, type: rss}
+  - {name: "Google Online Security", url: "https://feeds.feedburner.com/GoogleOnlineSecurityBlog",   category: ai_security, type: rss}
+  - {name: "MIT Cybersecurity",      url: "https://news.mit.edu/topic/mitcybersecurity.rss",          category: ai_security, type: rss}
+
+  # ── SCRAPE TIER (no RSS available) ─────────────────────────────
+  - name: "Cyware News"
+    url: "https://social.cyware.com/cyber-security-news-articles"
+    category: threat_intel
+    type: scrape_static
+    scrape_engine: httpx
+    list_selector: "div.card-body"
+    link_selector: "a.news-title"
+    rate_limit_seconds: 60
+```
+
+---
+
+## requirements.txt
+
+```
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+jinja2==3.1.4
+sqlalchemy[asyncio]==2.0.35
+aiosqlite==0.20.0
+feedparser==6.0.11
+trafilatura==1.12.0
+httpx==0.27.0
+apscheduler==3.10.4
+pydantic-settings==2.4.0
+python-dotenv==1.0.1
+pyyaml==6.0.2
+sqladmin==0.19.0
+itsdangerous==2.2.0
+playwright==1.47.0
+```
+
+---
+
+## Makefile
+
+```makefile
+VENV_PYTHON := .venv/bin/python
+ifeq ($(OS),Windows_NT)
+    VENV_PYTHON := .venv/Scripts/python.exe
+endif
+
+dev:
+	uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+test:
+	$(VENV_PYTHON) -m pytest tests/ -v --asyncio-mode=auto
+
+test-cov:
+	$(VENV_PYTHON) -m pytest tests/ --cov=app --cov-report=html
+
+lint:
+	$(VENV_PYTHON) -m ruff check app/ tests/
+
+format:
+	$(VENV_PYTHON) -m ruff format app/ tests/
+
+db-reset:
+	rm -f data/xybitz.db data/xybitz.db-wal data/xybitz.db-shm
+
+setup:
+	python setup.py
+
+.PHONY: dev test test-cov lint format db-reset setup
+```
+
+---
+
+## HARD CONSTRAINTS FOR COPILOT (READ EVERY ONE)
+
+```
+1.  NO React, Vue, Angular, or any JS framework — HTMX only
+2.  NO synchronous SQLAlchemy calls inside async functions — always AsyncSession
+3.  APScheduler MUST be AsyncIOScheduler — never BackgroundScheduler
+4.  Ollama/OpenAI/Groq calls MUST use httpx.AsyncClient — never requests, never any SDK
+5.  feedparser.parse() MUST use loop.run_in_executor (it is a blocking call)
+6.  WAL mode MUST be enabled on SQLite — see database.py spec above
+7.  /admin MUST require login via AdminAuth — credentials from .env
+8.  Ingestion MUST skip articles older than INITIAL_BACKFILL_DAYS — no exceptions
+9.  Summary status flow: pending → processing → done|failed — never skip steps
+10. LLM_PROVIDER routing in summariser.py MUST be runtime config — not hardcoded
+11. OLLAMA_MODEL is read from settings at runtime — never hardcoded in any file
+12. Every service function MUST use Python logging module — never print()
+13. All files MUST be complete — no truncation, no "# TODO", no "# add more here"
+14. Project MUST start with `make dev` immediately after `pip install -r requirements.txt`
+```
