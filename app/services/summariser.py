@@ -11,23 +11,35 @@ from app.services.activity_log import log_activity
 
 logger = logging.getLogger(__name__)
 
+MARKETING_ONLY_TOKEN = "MARKETING_ONLY"
+
+
 def build_prompt(text: str, title: str = "") -> str:
     word_count = len(text.split())
+
     if word_count < 30:
-        # Very short content — ask Ollama to expand from title context
+        # Very short — likely just a title. Treat it as the full context.
         return (
-            f"Write a 100-word cybersecurity news summary based on this title:\n"
-            f"{text}\n"
-            f"Focus on what happened, who was affected, and why it matters to security practitioners.\n"
+            f"You are a cybersecurity analyst.\n"
+            f"If this is a product announcement, vendor feature, or marketing content "
+            f"with no real threat or vulnerability, reply with exactly: MARKETING_ONLY\n"
+            f"Otherwise write a 100-word summary: what happened, what threat or "
+            f"vulnerability is involved, who is affected, and why it matters. "
+            f"Plain English, no bullets, no headers.\n\n"
+            f"Title: {text}\n\n"
             f"Summary:"
         )
     else:
-        # Normal full content summarisation
         return (
-            f"Summarise the following cybersecurity news article in exactly 100 words.\n"
-            f"Write in plain English. No bullet points. No markdown. No headers.\n"
-            f"Start directly with the key finding or event.\n"
-            f"Article: {text}\n"
+            f"You are a cybersecurity analyst.\n\n"
+            f"FIRST: If this article is a product announcement, vendor feature launch, "
+            f"platform pitch, or marketing copy — with no actual threat, attack, or "
+            f"vulnerability — reply with exactly: MARKETING_ONLY\n\n"
+            f"OTHERWISE: Write a 100-word summary covering the threat, attack technique, "
+            f"vulnerability, breach, or malware. Keep researcher or org attributions "
+            f"(e.g. 'ESET found...', 'Google Project Zero disclosed...'). Do NOT mention "
+            f"products, pricing, features, or calls to action. Plain English, no bullets.\n\n"
+            f"Article: {text}\n\n"
             f"Summary:"
         )
 
@@ -166,14 +178,21 @@ async def process_pending_articles(db: AsyncSession) -> dict:
         try:
             content = article.raw_content or article.title or ""
             summary = await summariser.summarise_with_retry(content, article.id)
-            article.summary = summary
-            article.summary_status = "done"
-            done_count += 1
-            log_activity("success", "summarise", f"Summarised: {article.title[:60]}" if article.title else "Summarised article")
-            logger.info(
-                "[%d/%d] ✓ Summarised: %s",
-                idx + 1, total, article.title[:60],
-            )
+
+            # Check if LLM flagged this as pure marketing — auto-hide
+            if summary.strip().upper().startswith(MARKETING_ONLY_TOKEN):
+                article.summary = None
+                article.summary_status = "done"
+                article.is_active = False
+                done_count += 1
+                log_activity("info", "summarise", f"Hidden (marketing): {article.title[:60]}" if article.title else "Hidden marketing article")
+                logger.info("[%d/%d] ⊘ Hid marketing article: %s", idx + 1, total, article.title[:60])
+            else:
+                article.summary = summary
+                article.summary_status = "done"
+                done_count += 1
+                log_activity("success", "summarise", f"Summarised: {article.title[:60]}" if article.title else "Summarised article")
+                logger.info("[%d/%d] ✓ Summarised: %s", idx + 1, total, article.title[:60])
         except Exception as exc:
             article.summary_status = "failed"
             failed_count += 1

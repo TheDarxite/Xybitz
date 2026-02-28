@@ -118,6 +118,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
 
+# ── Session middleware — MUST be added before routes that use request.session ──
+app.add_middleware(SessionMiddleware, secret_key=settings.ADMIN_PASSWORD)
+
+# ── /admin/ redirect — must be registered BEFORE sqladmin mount ───────────────
+# After sqladmin login it redirects to /admin/; this intercepts that and sends
+# authenticated users straight to the control center at /console.
+@app.get("/admin/")
+async def admin_home_redirect(request: Request):
+    if request.session.get("authenticated"):
+        return RedirectResponse("/console", status_code=302)
+    return RedirectResponse("/admin/login", status_code=302)
+
+
+# ── Admin action routes — MUST be before Admin(app,...) mount ─────────────────
+# sqladmin mounts at /admin and intercepts ALL /admin/* in route-order priority.
+# Registering these routes first ensures FastAPI handles them, not sqladmin.
+app.include_router(admin_actions_router)
+
 # ── Admin ─────────────────────────────────────────────────────────────────────
 auth_backend = AdminAuth(secret_key=settings.ADMIN_PASSWORD)
 admin = Admin(app, engine, authentication_backend=auth_backend, base_url="/admin")
@@ -129,17 +147,11 @@ admin.add_view(CategoryAdmin)
 app.include_router(articles_router)
 app.include_router(categories_router, prefix="/api/v1")
 app.include_router(health_router)
-app.include_router(admin_actions_router)
 
 # ── Static files ──────────────────────────────────────────────────────────────
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 templates = Jinja2Templates(directory="app/templates")
-
-
-# NOTE: Set SUMMARISATION_CONCURRENCY=1 in .env for CPU-only machines
-# ── Session middleware (required for request.session in admin actions) ────────
-app.add_middleware(SessionMiddleware, secret_key=settings.ADMIN_PASSWORD)
 
 
 # ── Request logging middleware ────────────────────────────────────────────────

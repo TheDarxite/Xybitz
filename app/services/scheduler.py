@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import delete, update
+from sqlalchemy import delete, select, update
 
 from app.config import settings
 from app.database import AsyncSessionLocal
@@ -79,15 +79,47 @@ async def retry_and_summarise_failed() -> None:
 
 
 async def purge_old_articles() -> None:
+    """
+    Delete articles older than ARTICLE_RETENTION_DAYS.
+    Protection: never delete the only done articles for a category —
+    if a category has NO done articles within the retention window,
+    its older done articles are kept so the category never shows 0.
+    """
     async with AsyncSessionLocal() as db:
-        cutoff = datetime.now(UTC) - timedelta(
-            days=settings.ARTICLE_RETENTION_DAYS
+        cutoff = datetime.now(UTC) - timedelta(days=settings.ARTICLE_RETENTION_DAYS)
+
+        # Categories that have at least 1 done article WITHIN the retention window
+        recent_result = await db.execute(
+            select(Article.category)
+            .where(Article.summary_status == "done", Article.fetched_at >= cutoff)
+            .distinct()
         )
-        result = await db.execute(
-            delete(Article).where(Article.fetched_at < cutoff)
+        safe_categories = [row[0] for row in recent_result.all()]
+
+        # Always delete old non-done articles (pending/failed that aged out will never summarise)
+        r1 = await db.execute(
+            delete(Article).where(
+                Article.fetched_at < cutoff,
+                Article.summary_status != "done",
+            )
         )
+
+        # Delete old done articles only for categories that have recent done articles
+        r2_count = 0
+        if safe_categories:
+            r2 = await db.execute(
+                delete(Article).where(
+                    Article.fetched_at < cutoff,
+                    Article.summary_status == "done",
+                    Article.category.in_(safe_categories),
+                )
+            )
+            r2_count = r2.rowcount
+
         await db.commit()
-        logger.info("Purged %d old articles", result.rowcount)
+        total = r1.rowcount + r2_count
+        log_activity("info", "system", f"Purge: removed {total} old articles (retained done articles for low-volume categories)")
+        logger.info("Purged %d old articles", total)
 
 
 async def watchdog_stuck_articles() -> None:

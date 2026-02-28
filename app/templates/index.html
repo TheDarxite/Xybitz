@@ -5,10 +5,15 @@
 <script id="article-data" type="application/json">{{ article_ids | tojson }}</script>
 
 <!-- Hero strip -->
-<div class="d-flex justify-content-between align-items-center py-2 mb-3 px-3 rounded"
-     style="background:var(--surface);border:1px solid var(--border)">
-  <span class="fw-semibold" style="font-size:.88rem;color:var(--text)">Stay current. 100-word summaries. Zero noise.</span>
-  <span style="font-size:.75rem;color:var(--text-muted);white-space:nowrap;margin-left:12px">{{ total_today }} today</span>
+<div class="xybitz-hero mb-4">
+  <div class="hero-left">
+    <span class="hero-live"><span class="live-dot-sm"></span> LIVE</span>
+    <span class="hero-tagline">AI-summarised cybersec intel. 100 words. Zero noise.</span>
+  </div>
+  <div class="hero-right">
+    <span class="hero-count">{{ total_today }}<span class="hero-count-label">today</span></span>
+    <span class="hero-keys"><span class="key-badge">&#8592;</span> <span class="key-badge">&#8594;</span></span>
+  </div>
 </div>
 
 <!-- Category filter pills -->

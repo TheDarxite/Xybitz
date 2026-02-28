@@ -111,8 +111,11 @@ async def ingest_all_feeds(db: AsyncSession) -> dict[str, Any]:
                             )
                         except Exception:
                             published_at = None
+                    # Default to now so dateless articles sort correctly and retention works
+                    if published_at is None:
+                        published_at = datetime.now(timezone.utc)
 
-                    if published_at and published_at < backfill_cutoff:
+                    if published_at < backfill_cutoff:
                         articles_skipped += 1
                         continue
 

@@ -119,7 +119,6 @@ async def index(
     filters = [
         Article.is_active.is_(True),
         Article.summary_status == "done",
-        _date_filter(),
     ]
     if category and category != "all":
         filters.append(Article.category == category)
@@ -127,7 +126,7 @@ async def index(
     ids_result = await db.execute(
         select(Article.id)
         .where(*filters)
-        .order_by(Article.published_at.desc().nullslast())
+        .order_by(Article.published_at.desc().nullslast(), Article.fetched_at.desc())
     )
     article_ids = [row[0] for row in ids_result.all()]
 
@@ -147,6 +146,7 @@ async def index(
     today_count_result = await db.execute(
         select(func.count(Article.id)).where(
             Article.is_active.is_(True),
+            Article.summary_status == "done",
             func.date(Article.fetched_at) == today,
         )
     )

@@ -1,8 +1,4 @@
 {% set cat = article.category %}
-{% set placeholder = article | placeholder_url %}
-{% set img = article.image_url if article.image_url else placeholder %}
-
-{# Slug to hex color map aligned with Bootstrap color names in DB #}
 {% set cat_colors = {
   "vulnerabilities":  "#c0392b",
   "malware":          "#d35400",
@@ -14,22 +10,33 @@
   "ai_security":      "#6610f2"
 } %}
 {% set cat_color = cat_colors.get(cat, "#4f46e5") %}
+{% set cat_label = cat | replace("_", " ") | upper %}
 
 <div class="tinder-card" id="tinder-card-{{ article.id }}">
 
-  <!-- Image area with category badge overlay -->
+  <!-- Image area -->
   <div class="tinder-card-img-wrap">
-    <img
-      src="{{ img }}"
-      alt="{{ article.title }}"
-      class="tinder-card-img"
-      onerror="this.onerror=null;this.src='{{ placeholder }}'"
-    >
+    {% if article.image_url %}
+      <img
+        src="{{ article.image_url }}"
+        alt="{{ article.title }}"
+        class="tinder-card-img"
+        onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+      >
+      <div class="tinder-img-gradient" style="display:none;background:linear-gradient(135deg,{{ cat_color }}cc 0%,{{ cat_color }}44 100%)">
+        <span class="tinder-img-cat-label">{{ cat_label }}</span>
+      </div>
+    {% else %}
+      <div class="tinder-img-gradient" style="background:linear-gradient(135deg,{{ cat_color }}cc 0%,{{ cat_color }}44 100%)">
+        <span class="tinder-img-cat-label">{{ cat_label }}</span>
+      </div>
+    {% endif %}
+
     <span class="tinder-cat-badge" style="background:{{ cat_color }}cc">
       {{ cat | replace("_", " ") | title }}
     </span>
     {% if article.is_featured %}
-      <span class="tinder-featured-badge">Featured</span>
+      <span class="tinder-featured-badge">&#11088; Featured</span>
     {% endif %}
   </div>
 

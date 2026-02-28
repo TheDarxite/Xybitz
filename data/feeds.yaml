@@ -10,7 +10,6 @@ feeds:
 
   # ── VULNERABILITIES ────────────────────────────────────────────
   - {name: "CISA Alerts",   url: "https://www.cisa.gov/cybersecurity-advisories/all.xml",  category: vulnerabilities, type: rss}
-  - {name: "NVD CVE Feed",  url: "https://nvd.nist.gov/feeds/xml/cve/misc/nvd-rss.xml",    category: vulnerabilities, type: rss}
   - {name: "SecurityWeek",  url: "https://feeds.feedburner.com/Securityweek",               category: vulnerabilities, type: rss}
 
   # ── MALWARE ────────────────────────────────────────────────────
