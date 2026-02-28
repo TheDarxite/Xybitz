@@ -132,99 +132,92 @@ class OllamaSummariser:
 
 
 _summariser = OllamaSummariser()
+_running_lock = asyncio.Lock()  # prevents overlapping summarisation runs
 
 
 async def process_pending_articles(db: AsyncSession) -> dict:
     """
     Summarises pending articles with full self-healing guarantees:
+    - Lock prevents overlapping runs (retry job won't pile on top of a running batch)
     - Each article has its own try/except — one failure never kills the batch
     - Per-article DB commit — partial progress always saved
-    - Timeout per article — never blocks the batch indefinitely
     - Returns stats dict for logging
     """
-    # 1. Fetch pending articles
-    result = await db.execute(
-        select(Article)
-        .where(Article.summary_status == "pending")
-        .order_by(Article.fetched_at.asc())
-        .limit(50)
-    )
-    articles = result.scalars().all()
+    if _running_lock.locked():
+        logger.debug("Summarisation already running — skipping duplicate trigger")
+        return {"processed": 0, "done": 0, "failed": 0, "skipped": True}
 
-    if not articles:
-        logger.debug("No pending articles to summarise")
-        return {"processed": 0, "done": 0, "failed": 0}
+    async with _running_lock:
+        # Fetch ALL pending articles — no arbitrary batch cap
+        result = await db.execute(
+            select(Article)
+            .where(Article.summary_status == "pending")
+            .order_by(Article.fetched_at.asc())
+        )
+        articles = result.scalars().all()
 
-    total = len(articles)
-    done_count = 0
-    failed_count = 0
+        if not articles:
+            logger.debug("No pending articles to summarise")
+            return {"processed": 0, "done": 0, "failed": 0}
 
-    logger.info("Starting summarisation: %d articles queued", total)
+        total = len(articles)
+        done_count = 0
+        failed_count = 0
+        logger.info("Starting summarisation: %d articles queued", total)
 
-    # 2. Mark ALL as "processing" in one batch commit before any Ollama calls
-    article_ids = [a.id for a in articles]
-    await db.execute(
-        update(Article)
-        .where(Article.id.in_(article_ids))
-        .values(summary_status="processing")
-    )
-    await db.commit()   # ← committed BEFORE Ollama calls start
+        # Mark ALL as "processing" in one batch commit before any Ollama calls
+        article_ids = [a.id for a in articles]
+        await db.execute(
+            update(Article)
+            .where(Article.id.in_(article_ids))
+            .values(summary_status="processing")
+        )
+        await db.commit()
 
-    # 3. Summarise each article individually — fully isolated
-    summariser = OllamaSummariser()
+        summariser = OllamaSummariser()
 
-    async def process_one(article: Article, idx: int) -> None:
-        nonlocal done_count, failed_count
-        try:
-            content = article.raw_content or article.title or ""
-            summary = await summariser.summarise_with_retry(content, article.id)
-
-            # Check if LLM flagged this as pure marketing — auto-hide
-            if summary.strip().upper().startswith(MARKETING_ONLY_TOKEN):
-                article.summary = None
-                article.summary_status = "done"
-                article.is_active = False
-                done_count += 1
-                log_activity("info", "summarise", f"Hidden (marketing): {article.title[:60]}" if article.title else "Hidden marketing article")
-                logger.info("[%d/%d] ⊘ Hid marketing article: %s", idx + 1, total, article.title[:60])
-            else:
-                article.summary = summary
-                article.summary_status = "done"
-                done_count += 1
-                log_activity("success", "summarise", f"Summarised: {article.title[:60]}" if article.title else "Summarised article")
-                logger.info("[%d/%d] ✓ Summarised: %s", idx + 1, total, article.title[:60])
-        except Exception as exc:
-            article.summary_status = "failed"
-            failed_count += 1
-            log_activity("error", "summarise", f"Failed: {article.title[:60] if article.title else str(article.id)} — {exc}")
-            logger.error(
-                "[%d/%d] ✗ Failed article_id=%d: %s",
-                idx + 1, total, article.id, exc, exc_info=False,
-            )
-        finally:
-            # Per-article commit — progress ALWAYS saved regardless of outcome
+        async def process_one(article: Article, idx: int) -> None:
+            nonlocal done_count, failed_count
             try:
-                await db.commit()
-            except Exception as commit_exc:
-                logger.error(
-                    "DB commit failed for article %d: %s", article.id, commit_exc
-                )
-                await db.rollback()
+                content = article.raw_content or article.title or ""
+                summary = await summariser.summarise_with_retry(content, article.id)
 
-    # 4. Run with semaphore to control concurrency
-    semaphore = asyncio.Semaphore(settings.SUMMARISATION_CONCURRENCY)
+                # Check if LLM flagged this as pure marketing — auto-hide
+                if summary.strip().upper().startswith(MARKETING_ONLY_TOKEN):
+                    article.summary = None
+                    article.summary_status = "done"
+                    article.is_active = False
+                    done_count += 1
+                    log_activity("info", "summarise", f"Hidden (marketing): {article.title[:60]}" if article.title else "Hidden marketing article")
+                    logger.info("[%d/%d] ⊘ Hid marketing article: %s", idx + 1, total, article.title[:60])
+                else:
+                    article.summary = summary
+                    article.summary_status = "done"
+                    done_count += 1
+                    log_activity("success", "summarise", f"Summarised: {article.title[:60]}" if article.title else "Summarised article")
+                    logger.info("[%d/%d] ✓ Summarised: %s", idx + 1, total, article.title[:60])
+            except Exception as exc:
+                article.summary_status = "failed"
+                failed_count += 1
+                log_activity("error", "summarise", f"Failed: {article.title[:60] if article.title else str(article.id)} — {exc}")
+                logger.error("[%d/%d] ✗ Failed article_id=%d: %s", idx + 1, total, article.id, exc, exc_info=False)
+            finally:
+                try:
+                    await db.commit()
+                except Exception as commit_exc:
+                    logger.error("DB commit failed for article %d: %s", article.id, commit_exc)
+                    await db.rollback()
 
-    async def guarded_process(article: Article, idx: int) -> None:
-        async with semaphore:
-            await process_one(article, idx)
+        semaphore = asyncio.Semaphore(settings.SUMMARISATION_CONCURRENCY)
 
-    await asyncio.gather(*[
-        guarded_process(article, idx)
-        for idx, article in enumerate(articles)
-    ])
+        async def guarded_process(article: Article, idx: int) -> None:
+            async with semaphore:
+                await process_one(article, idx)
 
-    logger.info(
-        "Summarisation batch complete: %d done, %d failed, %d total",
-        done_count, failed_count, total,
-    )
-    return {"processed": total, "done": done_count, "failed": failed_count}
+        await asyncio.gather(*[
+            guarded_process(article, idx)
+            for idx, article in enumerate(articles)
+        ])
+
+        logger.info("Summarisation complete: %d done, %d failed of %d total", done_count, failed_count, total)
+        return {"processed": total, "done": done_count, "failed": failed_count}

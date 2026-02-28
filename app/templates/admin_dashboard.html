@@ -86,6 +86,11 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .pager .pg-info{color:var(--dim);font-size:.75rem;}
 /* Color swatch */
 .swatch{width:14px;height:14px;border-radius:3px;display:inline-block;vertical-align:middle;margin-right:5px;}
+/* Bulk action bar */
+.bulk-bar{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:var(--surf2);border:1px solid var(--acc);border-radius:12px;padding:10px 18px;display:flex;align-items:center;gap:10px;box-shadow:0 8px 32px rgba(0,0,0,.7);z-index:500;transition:opacity .2s,transform .2s;}
+.bulk-bar.hidden{opacity:0;pointer-events:none;transform:translateX(-50%) translateY(14px);}
+.bulk-count{font-size:.8rem;font-weight:700;color:var(--acc);white-space:nowrap;padding-right:6px;border-right:1px solid var(--border);}
+input[type=checkbox].art-chk{accent-color:var(--acc);width:14px;height:14px;cursor:pointer;}
 /* Inline edit input */
 .edit-input{background:var(--surf2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 7px;font-size:.8rem;width:100%;min-width:80px;}
 .edit-input:focus{border-color:var(--acc);outline:none;}
@@ -260,10 +265,11 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <div class="info-block" style="padding:0;overflow:hidden;overflow-x:auto">
         <table class="src-table">
           <thead><tr>
+            <th style="width:32px;padding:8px 6px"><input type="checkbox" class="art-chk" id="art-chk-all" onchange="toggleSelectAll(this)" title="Select all on page"></th>
             <th>Title</th><th>Source</th><th>Category</th><th>Status</th><th>Fetched</th><th>Actions</th>
           </tr></thead>
           <tbody id="art-body">
-            <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--dim)">Loading...</td></tr>
+            <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--dim)">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -351,6 +357,16 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     </section>
 
   </main>
+</div>
+
+<!-- Bulk action bar (Articles) -->
+<div class="bulk-bar hidden" id="bulk-bar">
+  <span class="bulk-count" id="bulk-count">0 selected</span>
+  <button class="ctrl-btn success" style="padding:5px 14px;font-size:.76rem" onclick="bulkAction('show')"><i class="fa-solid fa-eye" style="font-size:.7rem"></i> Show</button>
+  <button class="ctrl-btn warning" style="padding:5px 14px;font-size:.76rem" onclick="bulkAction('hide')"><i class="fa-solid fa-eye-slash" style="font-size:.7rem"></i> Hide</button>
+  <button class="ctrl-btn primary" style="padding:5px 14px;font-size:.76rem" onclick="bulkAction('reset')"><i class="fa-solid fa-rotate" style="font-size:.7rem"></i> Reset</button>
+  <button class="ctrl-btn danger" style="padding:5px 14px;font-size:.76rem" onclick="bulkAction('delete')"><i class="fa-solid fa-trash" style="font-size:.7rem"></i> Delete</button>
+  <button class="tb-btn" style="font-size:.74rem;padding:4px 10px" onclick="clearSelection()">✕ Clear</button>
 </div>
 
 <!-- Toast -->
@@ -514,12 +530,12 @@ function loadArticles(page) {
   if (status && status !== 'all') params.set('status', status);
   if (category && category !== 'all') params.set('category', category);
   if (search) params.set('search', search);
-  document.getElementById('art-body').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--dim)">Loading...</td></tr>';
+  document.getElementById('art-body').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--dim)">Loading...</td></tr>';
   fetch('/admin/actions/articles?' + params.toString())
     .then(function(r){return r.json();})
     .then(renderArticles)
     .catch(function(){
-      document.getElementById('art-body').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--red)">Failed to load articles</td></tr>';
+      document.getElementById('art-body').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--red)">Failed to load articles</td></tr>';
     });
 }
 var STATUS_PILLS = {
@@ -532,7 +548,7 @@ function renderArticles(data) {
   var el = document.getElementById('art-count');
   if (el) el.textContent = data.total + ' total · page ' + data.page + '/' + data.pages;
   if (!data.articles || !data.articles.length) {
-    document.getElementById('art-body').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--dim)">No articles found</td></tr>';
+    document.getElementById('art-body').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--dim)">No articles found</td></tr>';
     document.getElementById('art-pager').innerHTML = '';
     return;
   }
@@ -552,7 +568,9 @@ function renderArticles(data) {
     var titleCell = '<a href="'+esc(a.url)+'" target="_blank" style="color:var(--text);text-decoration:none;font-weight:600">'
       + esc(a.title ? (a.title.length>70 ? a.title.slice(0,70)+'…' : a.title) : '—') + '</a>';
     if (!a.is_active) titleCell = '<span style="opacity:.4">' + titleCell + '</span>';
+    var chkChecked = selectedArticles.has(a.id) ? ' checked' : '';
     return ['<tr id="art-row-'+a.id+'">',
+      '<td style="padding:10px 6px"><input type="checkbox" class="art-chk art-row-chk" data-id="'+a.id+'"'+chkChecked+' onchange="toggleArtChk('+a.id+',this)"></td>',
       '<td>'+titleCell+'</td>',
       '<td style="color:var(--muted);font-size:.78rem">'+esc(a.source_name||'')+'</td>',
       '<td><span class="cat-tag" style="background:'+catColor+'33;color:'+catColor+'">'+esc(catName)+'</span></td>',
@@ -561,6 +579,15 @@ function renderArticles(data) {
       '<td style="display:flex;gap:4px;flex-wrap:wrap">'+activeBtn+featBtn+resetBtn+delBtn+'</td>',
       '</tr>'].join('');
   }).join('');
+  // Sync select-all checkbox state
+  var allChk = document.getElementById('art-chk-all');
+  if (allChk) {
+    var pageIds = data.articles.map(function(a){ return a.id; });
+    var allChecked = pageIds.length > 0 && pageIds.every(function(id){ return selectedArticles.has(id); });
+    var someChecked = pageIds.some(function(id){ return selectedArticles.has(id); });
+    allChk.checked = allChecked;
+    allChk.indeterminate = !allChecked && someChecked;
+  }
   // Pager
   var pager = document.getElementById('art-pager');
   var prev = '<button '+(data.page<=1?'disabled':'')+' onclick="loadArticles('+(data.page-1)+')">‹ Prev</button>';
@@ -595,6 +622,65 @@ function deleteArticle(id, btn) {
     .then(function(r){return r.json();})
     .then(function(){ toast('✕ Article deleted'); loadArticles(artPage); })
     .catch(function(){ btn.disabled=false; });
+}
+
+/* ── Bulk select ── */
+var selectedArticles = new Set();
+function updateBulkBar() {
+  var bar = document.getElementById('bulk-bar');
+  var countEl = document.getElementById('bulk-count');
+  if (selectedArticles.size > 0) {
+    bar.classList.remove('hidden');
+    countEl.textContent = selectedArticles.size + ' selected';
+  } else {
+    bar.classList.add('hidden');
+  }
+}
+function toggleArtChk(id, chk) {
+  if (chk.checked) { selectedArticles.add(id); } else { selectedArticles.delete(id); }
+  updateBulkBar();
+  // Update select-all indeterminate state
+  var allChk = document.getElementById('art-chk-all');
+  if (allChk) {
+    var boxes = document.querySelectorAll('.art-row-chk');
+    var checkedCount = 0;
+    boxes.forEach(function(b){ if (b.checked) checkedCount++; });
+    allChk.checked = checkedCount === boxes.length && boxes.length > 0;
+    allChk.indeterminate = checkedCount > 0 && checkedCount < boxes.length;
+  }
+}
+function toggleSelectAll(chk) {
+  document.querySelectorAll('.art-row-chk').forEach(function(b) {
+    var id = parseInt(b.dataset.id);
+    b.checked = chk.checked;
+    if (chk.checked) { selectedArticles.add(id); } else { selectedArticles.delete(id); }
+  });
+  updateBulkBar();
+}
+function clearSelection() {
+  selectedArticles.clear();
+  document.querySelectorAll('.art-row-chk').forEach(function(b){ b.checked = false; });
+  var allChk = document.getElementById('art-chk-all');
+  if (allChk) { allChk.checked = false; allChk.indeterminate = false; }
+  updateBulkBar();
+}
+function bulkAction(action) {
+  if (!selectedArticles.size) return;
+  var ids = Array.from(selectedArticles);
+  if (action === 'delete' && !confirm('Delete ' + ids.length + ' article' + (ids.length !== 1 ? 's' : '') + '?')) return;
+  fetch('/admin/actions/articles/bulk', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ids: ids, action: action})
+  })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var labels = {delete:'deleted', hide:'hidden', show:'shown', reset:'reset'};
+      toast('✓ ' + d.affected + ' article' + (d.affected !== 1 ? 's' : '') + ' ' + (labels[action] || action));
+      clearSelection();
+      loadArticles(artPage);
+    })
+    .catch(function(){ toast('Bulk action failed — check console'); });
 }
 
 /* ── Categories ── */

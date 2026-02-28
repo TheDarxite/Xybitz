@@ -278,6 +278,45 @@ async def reset_article_status(request: Request, article_id: int):
         return JSONResponse({"id": article_id, "summary_status": "pending"})
 
 
+@router.post("/articles/bulk")
+async def bulk_article_action(request: Request):
+    """Bulk action on multiple articles.
+    Body: { "ids": [int, ...], "action": "delete" | "hide" | "show" | "reset" }
+    """
+    require_admin(request)
+    body = await request.json()
+    ids = body.get("ids", [])
+    action = body.get("action", "")
+    if not ids or action not in ("delete", "hide", "show", "reset"):
+        raise HTTPException(status_code=400, detail="ids list and valid action required")
+
+    async with AsyncSessionLocal() as db:
+        if action == "delete":
+            result = await db.execute(delete(Article).where(Article.id.in_(ids)))
+            await db.commit()
+            return JSONResponse({"action": action, "affected": result.rowcount})
+        elif action == "hide":
+            result = await db.execute(
+                update(Article).where(Article.id.in_(ids)).values(is_active=False)
+            )
+            await db.commit()
+            return JSONResponse({"action": action, "affected": result.rowcount})
+        elif action == "show":
+            result = await db.execute(
+                update(Article).where(Article.id.in_(ids)).values(is_active=True)
+            )
+            await db.commit()
+            return JSONResponse({"action": action, "affected": result.rowcount})
+        elif action == "reset":
+            result = await db.execute(
+                update(Article)
+                .where(Article.id.in_(ids))
+                .values(summary_status="pending", summary=None, is_active=True)
+            )
+            await db.commit()
+            return JSONResponse({"action": action, "affected": result.rowcount})
+
+
 # ── Categories ────────────────────────────────────────────────────────────────
 
 @router.get("/categories")

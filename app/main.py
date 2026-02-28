@@ -6,7 +6,7 @@ from typing import AsyncGenerator
 
 import yaml
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqladmin import Admin
@@ -129,6 +129,71 @@ async def admin_home_redirect(request: Request):
     if request.session.get("authenticated"):
         return RedirectResponse("/console", status_code=302)
     return RedirectResponse("/admin/login", status_code=302)
+
+
+_LOGIN_PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Xybitz — Sign In</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;}
+.login-wrap{width:100%;max-width:380px;padding:24px;}
+.login-card{background:#161b22;border:1px solid #21262d;border-radius:14px;padding:36px 32px;}
+.brand{text-align:center;margin-bottom:28px;}
+.brand-title{font-size:1.3rem;font-weight:800;letter-spacing:.1em;color:#e6edf3;}
+.brand-title span{color:#6610f2;}
+.brand-sub{font-size:.65rem;font-weight:700;letter-spacing:.14em;color:#6610f2;text-transform:uppercase;margin-top:3px;}
+.lock-icon{font-size:2rem;margin-bottom:10px;display:block;filter:grayscale(.3);}
+.form-group{margin-bottom:14px;}
+.form-group label{display:block;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#8b949e;margin-bottom:5px;}
+.form-group input{width:100%;background:#1c2128;border:1px solid #21262d;color:#e6edf3;border-radius:8px;padding:10px 13px;font-size:.9rem;outline:none;transition:border-color .15s;}
+.form-group input:focus{border-color:#6610f2;}
+.btn-sign-in{width:100%;background:#6610f2;border:none;color:#fff;font-size:.88rem;font-weight:700;padding:11px;border-radius:8px;cursor:pointer;margin-top:6px;letter-spacing:.04em;transition:background .15s;}
+.btn-sign-in:hover{background:#7c3aed;}
+.error-msg{background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.4);color:#f85149;border-radius:8px;padding:10px 13px;font-size:.8rem;margin-bottom:16px;text-align:center;}
+.footer-note{text-align:center;color:#484f58;font-size:.68rem;margin-top:20px;}
+</style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="brand">
+      <span class="lock-icon">🔐</span>
+      <div class="brand-title">XYBITZ <span>CONTROL</span></div>
+      <div class="brand-sub">Pipeline Management Console</div>
+    </div>
+    {error_block}
+    <form method="post" action="/admin/login">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" name="username" autocomplete="username" autofocus placeholder="admin">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" name="password" autocomplete="current-password" placeholder="••••••••">
+      </div>
+      <button type="submit" class="btn-sign-in">Sign In</button>
+    </form>
+  </div>
+  <div class="footer-note">Xybitz Cybersecurity Aggregator</div>
+</div>
+</body>
+</html>"""
+
+_LOGIN_ERROR_BLOCK = '<div class="error-msg">Invalid credentials — try again.</div>'
+
+
+@app.get("/admin/login")
+async def admin_login_page(request: Request):
+    """Serve the dark-themed custom login page before sqladmin handles the POST."""
+    if request.session.get("authenticated"):
+        return RedirectResponse("/console", status_code=302)
+    error = request.query_params.get("error")
+    error_block = _LOGIN_ERROR_BLOCK if error else ""
+    html = _LOGIN_PAGE.replace("{error_block}", error_block)
+    return HTMLResponse(html)
 
 
 # ── Admin action routes — MUST be before Admin(app,...) mount ─────────────────
