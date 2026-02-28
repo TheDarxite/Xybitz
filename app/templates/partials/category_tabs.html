@@ -1,0 +1,30 @@
+<ul class="nav nav-tabs mb-3" id="categoryTabs">
+  <li class="nav-item">
+    <a
+      class="nav-link {% if current_category == 'all' %}active{% endif %}"
+      hx-get="/articles"
+      hx-target="#article-grid"
+      hx-swap="innerHTML"
+      hx-push-url="true"
+      hx-on:click="document.querySelector('[name=category]').value=''"
+      href="#"
+    >
+      All
+    </a>
+  </li>
+  {% for cat in categories %}
+  <li class="nav-item">
+    <a
+      class="nav-link {% if current_category == cat.slug %}active{% endif %}"
+      hx-get="/articles?category={{ cat.slug }}"
+      hx-target="#article-grid"
+      hx-swap="innerHTML"
+      hx-push-url="true"
+      hx-on:click="document.querySelector('[name=category]').value='{{ cat.slug }}'"
+      href="#"
+    >
+      {{ cat.name }}
+    </a>
+  </li>
+  {% endfor %}
+</ul>

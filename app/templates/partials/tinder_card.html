@@ -1,0 +1,72 @@
+{% set cat = article.category %}
+{% set placeholder = article | placeholder_url %}
+{% set img = article.image_url if article.image_url else placeholder %}
+
+{# Slug to hex color map aligned with Bootstrap color names in DB #}
+{% set cat_colors = {
+  "vulnerabilities":  "#c0392b",
+  "malware":          "#d35400",
+  "appsec":           "#1a56db",
+  "cloud_security":   "#0891b2",
+  "compliance":       "#057a55",
+  "privacy":          "#4b5563",
+  "threat_intel":     "#7c3aed",
+  "ai_security":      "#6610f2"
+} %}
+{% set cat_color = cat_colors.get(cat, "#4f46e5") %}
+
+<div class="tinder-card" id="tinder-card-{{ article.id }}">
+
+  <!-- Image area with category badge overlay -->
+  <div class="tinder-card-img-wrap">
+    <img
+      src="{{ img }}"
+      alt="{{ article.title }}"
+      class="tinder-card-img"
+      onerror="this.onerror=null;this.src='{{ placeholder }}'"
+    >
+    <span class="tinder-cat-badge" style="background:{{ cat_color }}cc">
+      {{ cat | replace("_", " ") | title }}
+    </span>
+    {% if article.is_featured %}
+      <span class="tinder-featured-badge">Featured</span>
+    {% endif %}
+  </div>
+
+  <!-- Content area -->
+  <div class="tinder-card-body">
+    <h5 class="tinder-title">
+      <a href="/articles/{{ article.id }}" class="text-decoration-none">
+        {{ article.title }}
+      </a>
+    </h5>
+
+    <div class="tinder-meta">
+      <span class="fw-semibold">{{ article.source_name }}</span>
+      {% if article.published_at %}
+        <span> &middot; {{ article.published_at | time_ago }}</span>
+      {% endif %}
+    </div>
+
+    {% if article.summary_status == "done" and article.summary %}
+      <p class="tinder-summary">{{ article.summary }}</p>
+    {% elif article.summary_status in ["pending", "processing"] %}
+      <p class="tinder-summary fst-italic">
+        <span class="spinner-border spinner-border-sm me-1" style="width:.8rem;height:.8rem"></span>
+        AI summary in progress...
+      </p>
+    {% else %}
+      <p class="tinder-summary fst-italic" style="color:#f85149;font-size:.82rem">Summary unavailable</p>
+    {% endif %}
+
+    <a
+      href="{{ article.url }}"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="tinder-read-btn"
+    >
+      Read original &rarr;
+    </a>
+  </div>
+
+</div>

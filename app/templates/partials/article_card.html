@@ -1,0 +1,72 @@
+{% set cat = article.category %}
+<div class="col-xl-4 col-lg-6 col-md-6 col-sm-12">
+  <div class="card h-100 shadow-sm border-0 mb-3">
+
+    <!-- Card Header -->
+    <div class="card-header d-flex justify-content-between align-items-center bg-transparent border-bottom">
+      <span>
+        {% if cat == 'vulnerabilities' %}
+          <span class="badge bg-danger">{{ cat | replace('_', ' ') | title }}</span>
+        {% elif cat == 'malware' %}
+          <span class="badge bg-warning text-dark">{{ cat | replace('_', ' ') | title }}</span>
+        {% elif cat == 'appsec' %}
+          <span class="badge bg-primary">{{ cat | replace('_', ' ') | title }}</span>
+        {% elif cat == 'cloud_security' %}
+          <span class="badge bg-info text-dark">{{ cat | replace('_', ' ') | title }}</span>
+        {% elif cat == 'compliance' %}
+          <span class="badge bg-success">{{ cat | replace('_', ' ') | title }}</span>
+        {% elif cat == 'privacy' %}
+          <span class="badge bg-secondary">{{ cat | replace('_', ' ') | title }}</span>
+        {% elif cat == 'threat_intel' %}
+          <span class="badge bg-purple">{{ cat | replace('_', ' ') | title }}</span>
+        {% elif cat == 'ai_security' %}
+          <span class="badge bg-ai-security">{{ cat | replace('_', ' ') | title }}</span>
+        {% else %}
+          <span class="badge bg-dark">{{ cat | replace('_', ' ') | title }}</span>
+        {% endif %}
+      </span>
+      <span class="text-muted small">
+        {{ article.source_name }}
+        {% if article.published_at %}
+          · {{ article.published_at | time_ago }}
+        {% endif %}
+      </span>
+    </div>
+
+    <!-- Card Body -->
+    <div class="card-body">
+      <h6 class="card-title">
+        <a href="/articles/{{ article.id }}" class="text-decoration-none text-dark">
+          {{ article.title }}
+        </a>
+      </h6>
+
+      {% if article.summary_status == 'done' %}
+        <p class="card-text small text-muted summary-text">{{ article.summary }}</p>
+      {% elif article.summary_status in ['pending', 'processing'] %}
+        <p class="card-text small text-muted fst-italic summarising">
+          <span class="spinner-border spinner-border-sm me-1"></span>
+          Summarising…
+        </p>
+      {% else %}
+        <p class="card-text small text-danger fst-italic">Summary unavailable</p>
+      {% endif %}
+    </div>
+
+    <!-- Card Footer -->
+    <div class="card-footer bg-transparent border-0 pt-0 d-flex justify-content-between align-items-center">
+      <a
+        href="{{ article.url }}"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn btn-outline-secondary btn-sm"
+      >
+        Read original →
+      </a>
+      {% if article.is_featured %}
+        <span title="Featured">⭐</span>
+      {% endif %}
+    </div>
+
+  </div>
+</div>

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Breadcrumb -->
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/">Home</a></li>
+    <li class="breadcrumb-item">{{ article.category | replace('_', ' ') | title }}</li>
+    <li class="breadcrumb-item active" aria-current="page">Article</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <!-- Title -->
+    <h2 class="mb-3">{{ article.title }}</h2>
+
+    <!-- Meta row -->
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-4 text-muted small">
+      <span><i class="fa-solid fa-rss me-1"></i>{{ article.source_name }}</span>
+      <span>
+        {% set cat = article.category %}
+        {% if cat == 'vulnerabilities' %}
+          <span class="badge bg-danger">{{ cat | replace('_', ' ') | title }}</span>
+        {% elif cat == 'malware' %}
+          <span class="badge bg-warning text-dark">{{ cat | replace('_', ' ') | title }}</span>
+        {% elif cat == 'appsec' %}
+          <span class="badge bg-primary">{{ cat | replace('_', ' ') | title }}</span>
+        {% elif cat == 'cloud_security' %}
+          <span class="badge bg-info text-dark">{{ cat | replace('_', ' ') | title }}</span>
+        {% elif cat == 'compliance' %}
+          <span class="badge bg-success">{{ cat | replace('_', ' ') | title }}</span>
+        {% elif cat == 'privacy' %}
+          <span class="badge bg-secondary">{{ cat | replace('_', ' ') | title }}</span>
+        {% elif cat == 'threat_intel' %}
+          <span class="badge bg-purple">{{ cat | replace('_', ' ') | title }}</span>
+        {% elif cat == 'ai_security' %}
+          <span class="badge bg-ai-security">{{ cat | replace('_', ' ') | title }}</span>
+        {% else %}
+          <span class="badge bg-dark">{{ cat | replace('_', ' ') | title }}</span>
+        {% endif %}
+      </span>
+      {% if article.published_at %}
+        <span><i class="fa-regular fa-clock me-1"></i>{{ article.published_at | time_ago }}</span>
+      {% endif %}
+    </div>
+
+    <!-- AI Summary Card -->
+    {% if article.summary %}
+    <div class="border-start border-primary border-3 bg-light p-3 mb-4 rounded-end">
+      <small class="text-uppercase fw-bold text-primary d-block mb-1">
+        <i class="fa-solid fa-robot me-1"></i>AI Summary
+      </small>
+      <p class="mb-0 summary-text">{{ article.summary }}</p>
+    </div>
+    {% elif article.summary_status in ['pending', 'processing'] %}
+    <div class="bg-light p-3 mb-4 rounded fst-italic text-muted">
+      <span class="spinner-border spinner-border-sm me-2"></span>Summary is being generated…
+    </div>
+    {% else %}
+    <div class="bg-light p-3 mb-4 rounded text-danger fst-italic">
+      Summary unavailable for this article.
+    </div>
+    {% endif %}
+
+    <!-- Actions -->
+    <div class="d-flex gap-2">
+      <a
+        href="{{ article.url }}"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn btn-primary"
+      >
+        Read Full Article <i class="fa-solid fa-arrow-up-right-from-square ms-1"></i>
+      </a>
+      <a href="/" class="btn btn-outline-secondary">
+        <i class="fa-solid fa-arrow-left me-1"></i>Back
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ page_title | default('Latest') }} — Xybitz</title>
+  <meta name="description" content="Cybersecurity news AI-summarised to 100 words. Always current.">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous">
+  <script src="https://unpkg.com/htmx.org@2.0.2" defer></script>
+  <link rel="stylesheet" href="/static/css/custom.css">
+</head>
+<body class="xybitz-body">
+
+<nav class="navbar xybitz-nav sticky-top">
+  <div class="container">
+    <a class="navbar-brand xybitz-brand" href="/">
+      🔐 <span class="brand-name">XYBITZ</span>
+      <span class="brand-sub">CYBERSEC PULSE</span>
+    </a>
+    <div class="nav-links">
+      <a href="/console" class="nav-lnk">Console</a>
+      <a href="/health" class="nav-lnk muted-lnk">Status</a>
+    </div>
+  </div>
+</nav>
+
+<main class="container py-4">
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="xybitz-footer">
+  <div class="container">
+    <span>Powered by Ollama · llama3.2:3b · Built locally · Zero cost</span>
+    <span class="ms-3 opacity-50">© 2026 Xybitz</span>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+</body>
+</html>

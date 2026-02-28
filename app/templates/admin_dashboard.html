@@ -1,0 +1,180 @@
+<!-- Xybitz Admin Console — accessible at /console -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Xybitz Console</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://unpkg.com/htmx.org@2.0.0/dist/htmx.min.js"></script>
+  <style>
+    body { background: #0d1117; color: #e6edf3; }
+    .console-nav { background: #010409; border-bottom: 1px solid #21262d; }
+    .console-brand { font-size: 1rem; font-weight: 700; color: #e6edf3 !important; letter-spacing: 0.05em; }
+    .status-card { border-radius: 10px; border: 1px solid #21262d; background: #161b22; color: #e6edf3; }
+    .tab-btn { background: transparent; border: none; color: #8b949e; font-weight: 600; padding: 8px 20px; border-bottom: 2px solid transparent; cursor: pointer; transition: all 0.15s; }
+    .tab-btn.active { color: #6610f2; border-bottom-color: #6610f2; }
+    .tab-btn:hover { color: #e6edf3; }
+    .tab-bar { border-bottom: 1px solid #21262d; }
+    .action-card { background: #161b22; border: 1px solid #21262d; border-radius: 12px; }
+    .processing-row { font-size: 0.82rem; border-left: 3px solid #0dcaf0; padding-left: 8px; margin-bottom: 5px; color: #c9d1d9; }
+    .activity-log { height: 420px; overflow-y: auto; font-family: monospace; font-size: 0.78rem; background: #010409; border: 1px solid #21262d; border-radius: 8px; padding: 12px; }
+    .log-entry { display: flex; gap: 10px; align-items: flex-start; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .log-time { color: #484f58; white-space: nowrap; min-width: 58px; }
+    .log-cat-fetch     { color: #58a6ff; }
+    .log-cat-summarise { color: #3fb950; }
+    .log-cat-retry     { color: #f0883e; }
+    .log-cat-system    { color: #8b949e; }
+    .log-msg-error   { color: #f85149; }
+    .log-msg-success { color: #3fb950; }
+    .log-msg-warn    { color: #f0883e; }
+    .log-msg-info    { color: #c9d1d9; }
+    .pulse { animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  </style>
+</head>
+<body>
+
+<nav class="navbar console-nav">
+  <div class="container-fluid px-4">
+    <span class="console-brand">🔐 XYBITZ CONSOLE</span>
+    <div class="d-flex gap-2 align-items-center">
+      <span class="badge bg-success" style="font-size:.68rem">
+        <span class="pulse">●</span> Auto-retry every 2 min
+      </span>
+      <a href="/" class="btn btn-sm btn-outline-secondary">← Site</a>
+      <a href="/admin/article/list" class="btn btn-sm" style="background:#161b22;color:#8b949e;border:1px solid #30363d">Articles DB →</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container py-4" style="max-width:960px">
+
+  <div class="tab-bar mb-4 d-flex">
+    <button class="tab-btn active" id="btn-status"   onclick="switchTab('status')">📊 Queue Status</button>
+    <button class="tab-btn"        id="btn-activity" onclick="switchTab('activity')">📡 Live Activity</button>
+  </div>
+
+  <!-- Tab: Queue Status -->
+  <div id="tab-status">
+    <div id="status-section"
+         hx-get="/admin/actions/status"
+         hx-trigger="load, every 3s"
+         hx-swap="innerHTML">
+      <div class="text-center py-4" style="color:#8b949e">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading...
+      </div>
+    </div>
+
+    <div class="action-card mt-4">
+      <div class="px-4 py-3 border-bottom fw-semibold" style="color:#8b949e;font-size:.85rem;letter-spacing:.05em;border-color:#21262d!important">
+        ⚙️ MANUAL CONTROLS
+      </div>
+      <div class="p-4 d-flex gap-3 flex-wrap">
+        <button class="btn btn-primary"
+                hx-post="/admin/actions/trigger-summarise"
+                hx-swap="none"
+                hx-on::after-request="showToast('Summarisation started')">
+          ▶ Summarise Pending
+        </button>
+        <button class="btn btn-warning"
+                hx-post="/admin/actions/retry-failed"
+                hx-swap="none"
+                hx-on::after-request="showToast('Failed articles reset and queued')">
+          🔁 Retry All Failed
+        </button>
+        <button class="btn btn-success"
+                hx-post="/admin/actions/trigger-fetch"
+                hx-swap="none"
+                hx-on::after-request="showToast('Fetch + summarise cycle started')">
+          📡 Fetch New Articles
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Live Activity -->
+  <div id="tab-activity" style="display:none">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <span style="color:#8b949e;font-size:.85rem">Real-time pipeline events — auto-refreshes every 2s</span>
+      <button class="btn btn-sm" style="background:#161b22;color:#8b949e;border:1px solid #30363d" onclick="clearLog()">Clear</button>
+    </div>
+    <div class="activity-log" id="activity-log">
+      <div style="color:#484f58;text-align:center;padding:20px">Waiting for events...</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index:9999">
+  <div id="actionToast" class="toast align-items-center text-bg-success border-0">
+    <div class="d-flex">
+      <div class="toast-body" id="toastMsg">Done.</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function switchTab(name) {
+  document.getElementById('tab-status').style.display   = name === 'status'   ? '' : 'none';
+  document.getElementById('tab-activity').style.display = name === 'activity' ? '' : 'none';
+  document.getElementById('btn-status').classList.toggle('active',   name === 'status');
+  document.getElementById('btn-activity').classList.toggle('active', name === 'activity');
+  if (name === 'activity') startActivityPolling();
+}
+function showToast(msg) {
+  document.getElementById('toastMsg').textContent = msg;
+  new bootstrap.Toast(document.getElementById('actionToast')).show();
+}
+document.body.addEventListener('htmx:afterSwap', function(evt) {
+  if (evt.detail.target.id !== 'status-section') return;
+  try {
+    var data = JSON.parse(evt.detail.target.textContent);
+    var row = [
+      {l:'Done',v:data.done,c:'#3fb950'},{l:'Pending',v:data.pending,c:'#f0883e'},
+      {l:'Processing',v:data.processing,c:'#58a6ff'},{l:'Failed',v:data.failed,c:'#f85149'},
+      {l:'Total',v:data.total,c:'#8b949e'}
+    ];
+    var html = '<div class="row g-3 mb-4">';
+    row.forEach(function(c){html+='<div class="col"><div class="status-card text-center p-3"><h3 style="color:'+c.c+'" class="fw-bold mb-0">'+c.v+'</h3><small style="color:#8b949e">'+c.l+'</small></div></div>';});
+    html += '</div>';
+    if (data.processing_articles && data.processing_articles.length > 0) {
+      html += '<div class="action-card p-3 mb-3"><div class="fw-semibold mb-2" style="color:#58a6ff"><span class="spinner-border spinner-border-sm me-2" style="width:.8rem;height:.8rem"></span>Processing '+data.processing+' article'+(data.processing!==1?'s':'')+'</div>';
+      data.processing_articles.forEach(function(a){html+='<div class="processing-row"><strong style="color:#58a6ff">'+a.source+'</strong> — '+a.title+'</div>';});
+      if (data.processing > data.processing_articles.length) html+='<div style="color:#484f58;font-size:.78rem;margin-top:4px">… and '+(data.processing-data.processing_articles.length)+' more</div>';
+      html += '</div>';
+    } else if (data.failed > 0) {
+      html += '<div class="alert mb-3 py-2" style="background:#2d1b1b;border:1px solid #f85149;border-radius:8px;color:#f85149">⚠️ <strong>'+data.failed+'</strong> failed — auto-retry in &lt;2 min, or click Retry All Failed.</div>';
+    } else if (data.pending > 0) {
+      html += '<div class="alert mb-3 py-2" style="background:#1b2838;border:1px solid #58a6ff;border-radius:8px;color:#58a6ff"><strong>'+data.pending+'</strong> pending — click ▶ Summarise Pending.</div>';
+    } else {
+      html += '<div class="alert mb-3 py-2" style="background:#1b2d1b;border:1px solid #3fb950;border-radius:8px;color:#3fb950">✅ All caught up.</div>';
+    }
+    evt.detail.target.innerHTML = html;
+  } catch(e) {}
+});
+var activityTimer = null;
+function startActivityPolling() {
+  if (activityTimer) return;
+  fetchActivity();
+  activityTimer = setInterval(fetchActivity, 2000);
+}
+function fetchActivity() {
+  fetch('/admin/actions/activity').then(function(r){return r.json();}).then(renderActivity).catch(function(){});
+}
+function renderActivity(entries) {
+  var log = document.getElementById('activity-log');
+  if (!entries || !entries.length) { log.innerHTML = '<div style="color:#484f58;text-align:center;padding:20px">No activity yet...</div>'; return; }
+  var icons = {fetch:'📡',summarise:'🤖',retry:'🔁',system:'⚙️'};
+  var html = '';
+  entries.forEach(function(e){
+    html += '<div class="log-entry"><span class="log-time">'+e.time+'</span><span class="log-cat-'+e.category+'">'+(icons[e.category]||'●')+'</span><span class="log-msg-'+e.level+'">'+e.message+'</span></div>';
+  });
+  log.innerHTML = html;
+}
+function clearLog() { document.getElementById('activity-log').innerHTML = '<div style="color:#484f58;text-align:center;padding:20px">Cleared...</div>'; }
+</script>
+</body>
+</html>

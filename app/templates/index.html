@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Article IDs embedded for JS navigation -->
+<script id="article-data" type="application/json">{{ article_ids | tojson }}</script>
+
+<!-- Hero strip -->
+<div class="d-flex justify-content-between align-items-center py-2 mb-3 px-3 rounded"
+     style="background:var(--surface);border:1px solid var(--border)">
+  <span class="fw-semibold" style="font-size:.88rem;color:var(--text)">Stay current. 100-word summaries. Zero noise.</span>
+  <span style="font-size:.75rem;color:var(--text-muted);white-space:nowrap;margin-left:12px">{{ total_today }} today</span>
+</div>
+
+<!-- Category filter pills -->
+<div class="d-flex gap-2 flex-wrap mb-4 justify-content-center">
+  <a href="/"
+     class="cat-pill {% if current_category == 'all' %}active{% endif %}"
+     style="--pill-color:#6610f2">
+    All
+  </a>
+  {% for cat in categories %}
+  <a href="/?category={{ cat.slug }}"
+     class="cat-pill {% if current_category == cat.slug %}active{% endif %}"
+     style="--pill-color:#{{ cat.color | cat_hex }}">
+    {{ cat.name }}
+  </a>
+  {% endfor %}
+</div>
+
+<!-- Swipe UI -->
+{% if article_ids %}
+<div class="swipe-ui">
+
+  <!-- Navigation + card + navigation -->
+  <div class="swipe-row">
+    <button class="nav-arrow" id="prev-btn" onclick="navigate(-1)" aria-label="Previous article" disabled>
+      &#8592;
+    </button>
+
+    <div id="card-zone">
+      {% if article %}
+        {% include "partials/tinder_card.html" %}
+      {% endif %}
+    </div>
+
+    <button class="nav-arrow" id="next-btn" onclick="navigate(1)" aria-label="Next article">
+      &#8594;
+    </button>
+  </div>
+
+  <!-- Progress indicator -->
+  <div class="swipe-progress text-center mt-3">
+    <span id="progress-label" style="color:var(--text-muted)" class="small">1 of {{ article_ids | length }}</span>
+    <div class="swipe-progress-bar mt-2">
+      <div class="swipe-progress-fill" id="progress-fill" style="width: {% if article_ids %}{{ (1 / article_ids|length * 100) | round(1) }}{% else %}0{% endif %}%"></div>
+    </div>
+  </div>
+
+</div>
+{% else %}
+<div class="text-center py-5">
+  <p style="color:var(--text-muted)" class="fs-5">No articles yet. Check back soon.</p>
+  <small style="color:var(--text-muted)">RSS feeds refresh every 30 minutes</small>
+</div>
+{% endif %}
+
+<script>
+(function() {
+  const ids = JSON.parse(document.getElementById('article-data').textContent || '[]');
+  let idx = 0;
+  const total = ids.length;
+
+  const cardZone  = document.getElementById('card-zone');
+  const prevBtn   = document.getElementById('prev-btn');
+  const nextBtn   = document.getElementById('next-btn');
+  const progLabel = document.getElementById('progress-label');
+  const progFill  = document.getElementById('progress-fill');
+
+  function updateNav() {
+    if (!prevBtn || !nextBtn) return;
+    prevBtn.disabled = idx === 0;
+    nextBtn.disabled = idx === total - 1;
+    if (progLabel) progLabel.textContent = `${idx + 1} of ${total}`;
+    if (progFill && total > 0) progFill.style.width = ((idx + 1) / total * 100).toFixed(1) + '%';
+  }
+
+  async function loadCard(direction) {
+    if (idx < 0 || idx >= total) return;
+
+    // Animate out
+    cardZone.classList.add('card-exit-' + (direction > 0 ? 'left' : 'right'));
+
+    try {
+      const resp = await fetch(`/articles/card/${ids[idx]}`);
+      if (!resp.ok) throw new Error(resp.status);
+      const html = await resp.text();
+
+      await new Promise(r => setTimeout(r, 150));
+      cardZone.innerHTML = html;
+      cardZone.classList.remove('card-exit-left', 'card-exit-right');
+      cardZone.classList.add('card-enter');
+      setTimeout(() => cardZone.classList.remove('card-enter'), 300);
+    } catch(e) {
+      cardZone.classList.remove('card-exit-left', 'card-exit-right');
+    }
+
+    updateNav();
+  }
+
+  window.navigate = function(dir) {
+    const next = idx + dir;
+    if (next < 0 || next >= total) return;
+    idx = next;
+    loadCard(dir);
+  };
+
+  // Keyboard arrow navigation
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowLeft')  window.navigate(-1);
+    if (e.key === 'ArrowRight') window.navigate(1);
+  });
+
+  // Touch/swipe support
+  let touchStartX = 0;
+  cardZone && cardZone.addEventListener('touchstart', function(e) {
+    touchStartX = e.touches[0].clientX;
+  }, { passive: true });
+  cardZone && cardZone.addEventListener('touchend', function(e) {
+    const diff = touchStartX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) window.navigate(diff > 0 ? 1 : -1);
+  }, { passive: true });
+
+  // Init
+  updateNav();
+})();
+</script>
+{% endblock %}

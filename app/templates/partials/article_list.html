@@ -1,0 +1,78 @@
+{% if not articles %}
+<div class="col-12 text-center py-5">
+  <p class="text-muted fs-5">No articles found. Check back soon.</p>
+  <small class="text-muted">RSS feeds refresh every 30 minutes</small>
+</div>
+{% else %}
+<div class="row g-3">
+  {% for article in articles %}
+    {% include "partials/article_card.html" %}
+  {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if pagination_meta.total_pages > 1 %}
+<nav class="mt-4" aria-label="Article pagination">
+  <ul class="pagination justify-content-center flex-wrap">
+
+    <!-- Previous -->
+    <li class="page-item {% if pagination_meta.page == 1 %}disabled{% endif %}">
+      <a
+        class="page-link"
+        {% if pagination_meta.prev_page %}
+          hx-get="/articles?page={{ pagination_meta.prev_page }}&category={{ current_category }}&search={{ search }}"
+          hx-target="#article-grid"
+          hx-swap="innerHTML"
+          href="#"
+        {% else %}
+          href="#"
+          tabindex="-1"
+          aria-disabled="true"
+        {% endif %}
+      >
+        &laquo; Prev
+      </a>
+    </li>
+
+    <!-- Page numbers (at most 5 around current) -->
+    {% set cur = pagination_meta.page %}
+    {% set total = pagination_meta.total_pages %}
+    {% set start = [1, cur - 2] | max %}
+    {% set end   = [total, cur + 2] | min %}
+    {% for n in range(start, end + 1) %}
+    <li class="page-item {% if n == cur %}active{% endif %}">
+      <a
+        class="page-link"
+        hx-get="/articles?page={{ n }}&category={{ current_category }}&search={{ search }}"
+        hx-target="#article-grid"
+        hx-swap="innerHTML"
+        href="#"
+      >
+        {{ n }}
+      </a>
+    </li>
+    {% endfor %}
+
+    <!-- Next -->
+    <li class="page-item {% if pagination_meta.page == pagination_meta.total_pages %}disabled{% endif %}">
+      <a
+        class="page-link"
+        {% if pagination_meta.next_page %}
+          hx-get="/articles?page={{ pagination_meta.next_page }}&category={{ current_category }}&search={{ search }}"
+          hx-target="#article-grid"
+          hx-swap="innerHTML"
+          href="#"
+        {% else %}
+          href="#"
+          tabindex="-1"
+          aria-disabled="true"
+        {% endif %}
+      >
+        Next &raquo;
+      </a>
+    </li>
+
+  </ul>
+</nav>
+{% endif %}
+{% endif %}
