@@ -43,9 +43,7 @@
   <!-- Content area -->
   <div class="tinder-card-body">
     <h5 class="tinder-title">
-      <a href="/articles/{{ article.id }}" class="text-decoration-none">
-        {{ article.title }}
-      </a>
+      {{ article.title }}
     </h5>
 
     <div class="tinder-meta">
@@ -56,7 +54,10 @@
     </div>
 
     {% if article.summary_status == "done" and article.summary %}
-      <p class="tinder-summary">{{ article.summary }}</p>
+      <div class="tinder-summary-wrap">
+        <p class="tinder-summary tinder-summary-collapsed" id="ts-{{ article.id }}">{{ article.summary }}</p>
+        <button class="read-more-btn" id="rm-{{ article.id }}" onclick="toggleReadMore('{{ article.id }}')">…read more</button>
+      </div>
     {% elif article.summary_status in ["pending", "processing"] %}
       <p class="tinder-summary fst-italic">
         <span class="spinner-border spinner-border-sm me-1" style="width:.8rem;height:.8rem"></span>

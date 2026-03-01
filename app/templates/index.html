@@ -16,8 +16,8 @@
   </div>
 </div>
 
-<!-- Category filter pills -->
-<div class="d-flex gap-2 flex-wrap mb-4 justify-content-center">
+<!-- Category filter pills — hidden on mobile -->
+<div class="d-flex gap-2 flex-wrap mb-4 justify-content-center cat-pill-row">
   <a href="/"
      class="cat-pill {% if current_category == 'all' %}active{% endif %}"
      style="--pill-color:#6610f2">
@@ -30,6 +30,23 @@
     {{ cat.name }}
   </a>
   {% endfor %}
+</div>
+
+<!-- Mobile compact filter bar — hidden on desktop -->
+<div class="mobile-filter-bar">
+  <span class="mobile-active-cat">
+    <span style="width:8px;height:8px;border-radius:50%;background:
+      {%- if current_category == 'all' %}#6610f2
+      {%- else %}{% for cat in categories %}{% if cat.slug == current_category %}#{{ cat.color | cat_hex }}{% endif %}{% endfor %}
+      {%- endif %};display:inline-block;flex-shrink:0"></span>
+    {%- if current_category == 'all' %}All Categories
+    {%- else %}{% for cat in categories %}{% if cat.slug == current_category %}{{ cat.name }}{% endif %}{% endfor %}
+    {%- endif %}
+  </span>
+  <button class="mobile-filter-btn" onclick="openFilterSheet()" aria-label="Filter by category">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+    Filter
+  </button>
 </div>
 
 <!-- Swipe UI -->
@@ -105,6 +122,10 @@
       cardZone.classList.remove('card-exit-left', 'card-exit-right');
       cardZone.classList.add('card-enter');
       setTimeout(() => cardZone.classList.remove('card-enter'), 300);
+      // Show "...read more" button only if summary text is actually clamped
+      const p = cardZone.querySelector('.tinder-summary-collapsed');
+      const rm = cardZone.querySelector('.read-more-btn');
+      if (p && rm && p.scrollHeight > p.clientHeight + 2) rm.style.display = 'block';
     } catch(e) {
       cardZone.classList.remove('card-exit-left', 'card-exit-right');
     }
@@ -137,6 +158,59 @@
 
   // Init
   updateNav();
+
+  // Show "...read more" on the initial server-rendered card if needed
+  const initP = cardZone && cardZone.querySelector('.tinder-summary-collapsed');
+  const initRm = cardZone && cardZone.querySelector('.read-more-btn');
+  if (initP && initRm && initP.scrollHeight > initP.clientHeight + 2) initRm.style.display = 'block';
 })();
+</script>
+<!-- Mobile category filter bottom sheet -->
+<div class="filter-sheet-overlay" id="filter-overlay" onclick="closeFilterSheet()"></div>
+<div class="filter-sheet" id="filter-sheet" role="dialog" aria-modal="true" aria-label="Filter by category">
+  <div class="filter-sheet-handle"></div>
+  <div class="filter-sheet-title">Filter by Category</div>
+  <a href="/" class="filter-sheet-item {% if current_category == 'all' %}active{% endif %}">
+    <span class="filter-sheet-dot" style="background:#6610f2"></span>
+    All Categories
+    {% if current_category == 'all' %}<span style="margin-left:auto;font-size:.7rem;color:#a78bfa">✓</span>{% endif %}
+  </a>
+  {% for cat in categories %}
+  <a href="/?category={{ cat.slug }}"
+     class="filter-sheet-item {% if current_category == cat.slug %}active{% endif %}">
+    <span class="filter-sheet-dot" style="background:#{{ cat.color | cat_hex }}"></span>
+    {{ cat.name }}
+    {% if current_category == cat.slug %}<span style="margin-left:auto;font-size:.7rem;color:#a78bfa">✓</span>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+
+<script>
+function openFilterSheet() {
+  document.getElementById('filter-sheet').classList.add('open');
+  document.getElementById('filter-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeFilterSheet() {
+  document.getElementById('filter-sheet').classList.remove('open');
+  document.getElementById('filter-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+// Close on Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeFilterSheet();
+});
+function toggleReadMore(id) {
+  var p = document.getElementById('ts-' + id);
+  var btn = document.getElementById('rm-' + id);
+  if (!p) return;
+  if (p.classList.contains('expanded')) {
+    p.classList.remove('expanded');
+    btn.textContent = '\u2026read more';
+  } else {
+    p.classList.add('expanded');
+    btn.textContent = 'less \u2191';
+  }
+}
 </script>
 {% endblock %}

@@ -5,8 +5,10 @@ Mounted at /admin/actions/
 """
 import asyncio
 import logging
+import pathlib
+import shutil
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from sqlalchemy import delete, func, select, update
 
@@ -79,6 +81,7 @@ async def get_sources(request: Request):
             "name": s.name,
             "url": s.url,
             "category": s.category,
+            "source_type": s.source_type,
             "article_count": s.article_count,
             "last_fetched_at": s.last_fetched_at.isoformat() if s.last_fetched_at else None,
             "consecutive_failures": s.consecutive_failures,
@@ -220,6 +223,7 @@ async def list_articles(
                 "is_active": a.is_active,
                 "is_featured": a.is_featured,
                 "url": a.url,
+                "image_url": a.image_url,
             }
             for a in articles
         ],
@@ -317,6 +321,37 @@ async def bulk_article_action(request: Request):
             return JSONResponse({"action": action, "affected": result.rowcount})
 
 
+_UPLOAD_DIR = pathlib.Path("app/static/uploads")
+_ALLOWED_IMG_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+
+
+@router.post("/articles/{article_id}/image")
+async def upload_article_image(
+    request: Request,
+    article_id: int,
+    file: UploadFile = File(...),
+):
+    """Upload a custom image for an article and save it to static/uploads/."""
+    require_admin(request)
+    if file.content_type not in _ALLOWED_IMG_TYPES:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP and GIF images are accepted")
+    _UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    suffix = pathlib.Path(file.filename or "img.jpg").suffix.lower() or ".jpg"
+    filename = f"article_{article_id}{suffix}"
+    dest = _UPLOAD_DIR / filename
+    with dest.open("wb") as fh:
+        shutil.copyfileobj(file.file, fh)
+    image_url = f"/static/uploads/{filename}"
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Article).where(Article.id == article_id))
+        article = result.scalar_one_or_none()
+        if not article:
+            raise HTTPException(status_code=404, detail="Article not found")
+        article.image_url = image_url
+        await db.commit()
+    return JSONResponse({"image_url": image_url})
+
+
 # ── Categories ────────────────────────────────────────────────────────────────
 
 @router.get("/categories")
@@ -363,6 +398,10 @@ async def update_category(request: Request, category_id: int):
         cat = result.scalar_one_or_none()
         if not cat:
             raise HTTPException(status_code=404, detail="Category not found")
+        if "slug" in body:
+            new_slug = body["slug"].strip().lower().replace(" ", "_")
+            if new_slug:
+                cat.slug = new_slug
         if "name" in body:
             cat.name = body["name"].strip()
         if "color" in body:

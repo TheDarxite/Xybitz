@@ -299,7 +299,7 @@
   font-size: 0.87rem;
   line-height: 1.65;
   color: #8b949e;
-  margin-bottom: 18px;
+  margin-bottom: 0;
 }
 
 .tinder-read-btn {
@@ -359,13 +359,190 @@
 }
 .ai-summary-label { color: var(--accent); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 
+/* ── Read-more truncation ────────────────────────────────────────────── */
+.tinder-summary-wrap {
+  position: relative;
+  margin-bottom: 18px;
+}
+.tinder-summary-collapsed {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tinder-summary-collapsed.expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+/* Collapsed: "…read more" floats inline at end of last visible line */
+.tinder-summary-collapsed:not(.expanded) ~ .read-more-btn {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(to right, transparent, var(--surface) 38%);
+  padding-left: 3em;
+  font-size: 0.87rem;
+  line-height: 1.65;
+}
+
+/* Expanded: "less ↑" sits on its own line below the full text */
+.tinder-summary-collapsed.expanded ~ .read-more-btn {
+  position: static;
+  background: none;
+  padding-left: 0;
+  display: block;
+  margin-top: 4px;
+  font-size: 0.78rem;
+}
+
+.read-more-btn {
+  display: none; /* shown by JS only if text is actually clamped */
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  letter-spacing: 0.02em;
+}
+.read-more-btn:hover { color: #a78bfa; text-decoration: underline; }
+
 /* ── Responsive ──────────────────────────────────────────── */
-@media (max-width: 479px) {
+
+/* Desktop: hide mobile-only elements */
+@media (min-width: 768px) {
+  .mobile-filter-bar { display: none !important; }
+  .filter-sheet, .filter-sheet-overlay { display: none !important; }
+}
+
+/* Mobile: vertical card, no hero, no pills, filter button */
+@media (max-width: 767px) {
+  /* Hide desktop elements */
+  .xybitz-hero { display: none; }
+  .cat-pill-row { display: none !important; } /* !important overrides Bootstrap's d-flex */
+
+  /* Shrink container top/bottom padding */
+  main.container { padding-top: 10px !important; padding-bottom: 10px !important; }
+
+  /* Compact filter bar */
+  .mobile-filter-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding: 0 2px;
+  }
+  .mobile-active-cat {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .mobile-filter-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: .75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color .15s;
+  }
+  .mobile-filter-btn:hover { border-color: var(--accent); color: var(--text); }
+
+  /* Smaller nav arrows on mobile */
   .nav-arrow { width: 40px; height: 40px; font-size: 1rem; }
   .swipe-row { gap: 10px; }
-  #card-zone { max-width: 100%; }
-  .tinder-card-img-wrap { height: 180px; }
-  .hero-keys  { display: none; }
-  .hero-count { font-size: 1.2rem; }
+  #card-zone { max-width: 100%; min-height: 380px; }
+  .tinder-card-img-wrap { height: 170px; }
   .tinder-img-cat-label { font-size: 1.4rem; letter-spacing: 0.1em; }
+
+  /* Footer */
+  .xybitz-footer { margin-top: 20px; }
+}
+
+/* Extra small screens */
+@media (max-width: 399px) {
+  .swipe-row  { gap: 6px; }
+  .nav-arrow  { width: 34px; height: 34px; font-size: .9rem; }
+  .tinder-card-img-wrap { height: 150px; }
+  .tinder-img-cat-label { font-size: 1.2rem; }
+}
+
+/* ── Filter bottom sheet (mobile only, always in DOM) ────── */
+.filter-sheet-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.65);
+  z-index: 300;
+  backdrop-filter: blur(2px);
+}
+.filter-sheet-overlay.open { display: block; }
+
+.filter-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-radius: 20px 20px 0 0;
+  padding: 12px 0 32px;
+  z-index: 400;
+  transform: translateY(100%);
+  transition: transform .28s cubic-bezier(.4,0,.2,1);
+  max-height: 78vh;
+  overflow-y: auto;
+}
+.filter-sheet.open { transform: translateY(0); }
+
+.filter-sheet-handle {
+  width: 36px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 0 auto 16px;
+}
+.filter-sheet-title {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0 20px 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+.filter-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 20px;
+  text-decoration: none;
+  color: var(--text);
+  font-size: .92rem;
+  font-weight: 500;
+  transition: background .1s;
+}
+.filter-sheet-item:hover,
+.filter-sheet-item:focus { background: rgba(255,255,255,.04); }
+.filter-sheet-item.active {
+  color: #fff;
+  font-weight: 700;
+  background: rgba(102,16,242,.12);
+}
+.filter-sheet-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }

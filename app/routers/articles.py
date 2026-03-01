@@ -193,23 +193,3 @@ async def article_card(
     )
 
 
-@router.get("/articles/{article_id}", response_class=HTMLResponse)
-async def article_detail(
-    request: Request,
-    article_id: int,
-    db: AsyncSession = Depends(get_db),
-) -> HTMLResponse:
-    result = await db.execute(
-        select(Article).where(
-            Article.id == article_id, Article.is_active.is_(True)
-        )
-    )
-    article = result.scalar_one_or_none()
-
-    if not article:
-        raise HTTPException(status_code=404, detail="Article not found")
-
-    return templates.TemplateResponse(
-        "article_detail.html",
-        {"request": request, "article": article, "placeholder_image": PLACEHOLDER_IMAGE},
-    )

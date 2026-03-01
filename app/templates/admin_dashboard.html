@@ -24,7 +24,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .sidebar-link{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:6px;color:var(--muted);text-decoration:none;font-size:.82rem;font-weight:500;cursor:pointer;transition:all .15s;border:none;background:transparent;width:100%;text-align:left;}
 .sidebar-link:hover{background:rgba(255,255,255,.05);color:var(--text);}.sidebar-link.active{background:rgba(102,16,242,.15);color:var(--acc);}
 .sidebar-link .icon{width:18px;text-align:center;font-size:.85rem;}.sidebar-divider{border-color:var(--border);margin:8px 12px;}
-.cc-main{flex:1;padding:28px 32px;max-width:1000px;}
+.cc-main{flex:1;padding:28px 32px;min-width:0;overflow-x:hidden;}
 .stat-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px;}
 .stat-card{background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:16px 12px;text-align:center;position:relative;overflow:hidden;}
 .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--c,var(--border));border-radius:10px 10px 0 0;}
@@ -128,11 +128,8 @@ input[type=checkbox].art-chk{accent-color:var(--acc);width:14px;height:14px;curs
     <button class="sidebar-link active" id="nav-queue" onclick="showSection('queue')">
       <span class="icon">⚡</span> Queue Status
     </button>
-    <button class="sidebar-link" id="nav-sources" onclick="showSection('sources')">
-      <span class="icon">📡</span> Feed Sources
-    </button>
     <button class="sidebar-link" id="nav-activity" onclick="showSection('activity')">
-      <span class="icon">⬛</span> Live Activity
+      <span class="icon"><i class="fa-solid fa-terminal"></i></span> Live Activity
     </button>
     <hr class="sidebar-divider">
     <div class="sidebar-label">Database</div>
@@ -204,27 +201,10 @@ input[type=checkbox].art-chk{accent-color:var(--acc);width:14px;height:14px;curs
       </div>
     </section>
 
-    <!-- SOURCES SECTION -->
-    <section id="sec-sources" style="display:none">
-      <div class="sec-head"><span>📡</span> Feed Sources <span style="margin-left:auto;font-size:.65rem;color:var(--dim)">click to reload</span>
-        <button class="tb-btn" style="font-size:.68rem;padding:3px 10px;margin-left:6px" onclick="reloadSources()">↺ Refresh</button>
-      </div>
-      <div class="info-block" style="padding:0;overflow:hidden">
-        <table class="src-table" id="src-table">
-          <thead><tr>
-            <th>Source</th><th>Category</th><th>Articles</th><th>Last Fetch</th><th>Failures</th><th>Active</th>
-          </tr></thead>
-          <tbody id="src-body">
-            <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--dim)">Loading sources...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
     <!-- ACTIVITY SECTION -->
     <section id="sec-activity" style="display:none">
       <div class="sec-head">
-        <span>⬛</span> Live Activity
+        <span><i class="fa-solid fa-terminal"></i></span> Live Activity
         <span style="margin-left:auto;display:flex;gap:8px">
           <button onclick="toggleAutoScroll()" id="autoscroll-btn" class="tb-btn" style="font-size:.68rem;padding:3px 10px">⬇ Auto-scroll: ON</button>
           <button onclick="clearActivity()" class="tb-btn" style="font-size:.68rem;padding:3px 10px">Clear</button>
@@ -266,10 +246,10 @@ input[type=checkbox].art-chk{accent-color:var(--acc);width:14px;height:14px;curs
         <table class="src-table">
           <thead><tr>
             <th style="width:32px;padding:8px 6px"><input type="checkbox" class="art-chk" id="art-chk-all" onchange="toggleSelectAll(this)" title="Select all on page"></th>
-            <th>Title</th><th>Source</th><th>Category</th><th>Status</th><th>Fetched</th><th>Actions</th>
+            <th>Title</th><th>Source</th><th>Category</th><th>Status</th><th>Published</th><th>Fetched</th><th>Actions</th>
           </tr></thead>
           <tbody id="art-body">
-            <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--dim)">Loading...</td></tr>
+            <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--dim)">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -284,10 +264,10 @@ input[type=checkbox].art-chk{accent-color:var(--acc);width:14px;height:14px;curs
       <div class="info-block" style="padding:0;overflow:hidden;overflow-x:auto">
         <table class="src-table">
           <thead><tr>
-            <th>Name</th><th>URL</th><th>Category</th><th>Type</th><th>Active</th><th>Articles</th><th>Actions</th>
+            <th>Name</th><th>URL</th><th>Category</th><th>Type</th><th>Articles</th><th>Last Fetch</th><th>Failures</th><th>Active</th><th>Actions</th>
           </tr></thead>
           <tbody id="msrc-body">
-            <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--dim)">Loading...</td></tr>
+            <tr><td colspan="9" style="text-align:center;padding:24px;color:var(--dim)">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -349,7 +329,9 @@ input[type=checkbox].art-chk{accent-color:var(--acc);width:14px;height:14px;curs
       <div class="add-form" id="cat-add-form">
         <label>Slug<input id="cat-slug" placeholder="e.g. opsec" style="width:130px"></label>
         <label>Name<input id="cat-name" placeholder="e.g. OpSec" style="width:130px"></label>
-        <label>Color<input id="cat-color" placeholder="primary / #hex" style="width:130px" value="primary"></label>
+        <label style="align-items:center;gap:6px">Color
+          <input type="color" id="cat-color" value="#6610f2" style="width:44px;height:32px;border:1px solid var(--border);border-radius:6px;background:var(--surf2);cursor:pointer;padding:2px">
+        </label>
         <button class="ctrl-btn success" style="padding:7px 18px;margin-top:auto" onclick="submitNewCategory()">
           <i class="fa-solid fa-plus" style="font-size:.75rem"></i> Add Category
         </button>
@@ -369,12 +351,15 @@ input[type=checkbox].art-chk{accent-color:var(--acc);width:14px;height:14px;curs
   <button class="tb-btn" style="font-size:.74rem;padding:4px 10px" onclick="clearSelection()">✕ Clear</button>
 </div>
 
+<!-- Hidden file input for article image upload -->
+<input type="file" id="art-img-file" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" onchange="doUploadArtImage(this)">
+
 <!-- Toast -->
 <div id="cc-toast">✓ <span id="toast-msg"></span></div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-var ALL_SECTIONS = ['queue','sources','activity','articles','manage-sources','categories'];
+var ALL_SECTIONS = ['queue','activity','articles','manage-sources','categories'];
 function showSection(name) {
   ALL_SECTIONS.forEach(function(s) {
     var sec = document.getElementById('sec-'+s);
@@ -382,7 +367,6 @@ function showSection(name) {
     var btn = document.getElementById('nav-'+s);
     if (btn) btn.classList.toggle('active', s===name);
   });
-  if (name==='sources') loadSources();
   if (name==='activity') startActivity();
   if (name==='articles') loadArticles(1);
   if (name==='manage-sources') loadManageSources();
@@ -460,60 +444,12 @@ function renderQueue(data) {
   if (upd) upd.textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
 
-/* ── Feed Sources ── */
-var sourcesLoaded = false;
-function loadSources() {
-  sourcesLoaded = false;
-  reloadSources();
-}
-function reloadSources() {
-  document.getElementById('src-body').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--dim)">Loading...</td></tr>';
-  fetch('/admin/actions/sources').then(function(r){return r.json();}).then(renderSources).catch(function(){
-    document.getElementById('src-body').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--red)">Failed to load sources</td></tr>';
-  });
-}
+/* ── Sources ── */
 var CAT_COLORS = {
   threat_intel:'#7c3aed', vulnerabilities:'#c0392b', malware:'#d35400',
   appsec:'#1a56db', cloud_security:'#0891b2', compliance:'#057a55',
   privacy:'#4b5563', ai_security:'#6610f2'
 };
-function renderSources(sources) {
-  if (!sources || !sources.length) {
-    document.getElementById('src-body').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--dim)">No sources found</td></tr>';
-    return;
-  }
-  document.getElementById('src-body').innerHTML = sources.map(function(s) {
-    var catColor = CAT_COLORS[s.category] || '#4f46e5';
-    var catName  = (s.category||'').replace(/_/g,' ');
-    var lastFetch = s.last_fetched_at ? timeAgo(s.last_fetched_at) : '<span style="color:var(--dim)">never</span>';
-    var failures = s.consecutive_failures > 0
-      ? '<span class="src-fail">'+s.consecutive_failures+'</span>'
-      : '<span class="src-ok">0</span>';
-    var activeLabel = s.is_active ? '<span class="status-dot on"></span>on' : '<span class="status-dot off"></span><span style="color:var(--red)">off</span>';
-    var toggleLabel = s.is_active ? 'Disable' : 'Enable';
-    var toggleClass = s.is_active ? 'danger' : 'success';
-    return ['<tr id="src-row-'+s.id+'">',
-      '<td style="font-weight:600">'+esc(s.name)+'</td>',
-      '<td><span class="cat-tag" style="background:'+catColor+'33;color:'+catColor+'">'+esc(catName)+'</span></td>',
-      '<td style="color:var(--muted)">'+s.article_count+'</td>',
-      '<td style="color:var(--muted)">'+lastFetch+'</td>',
-      '<td>'+failures+'</td>',
-      '<td style="font-size:.78rem;display:flex;align-items:center;gap:8px">'+activeLabel+
-        '<button class="row-btn '+toggleClass+'" onclick="toggleSource('+s.id+',this)">'+toggleLabel+'</button></td>',
-      '</tr>'].join('');
-  }).join('');
-}
-function toggleSource(id, btn) {
-  btn.disabled = true;
-  fetch('/admin/actions/sources/'+id+'/toggle-active', {method:'PATCH'})
-    .then(function(r){return r.json();})
-    .then(function(data){
-      toast('Source '+(data.is_active?'enabled':'disabled'));
-      reloadSources();
-    })
-    .catch(function(){ btn.disabled=false; toast('Error toggling source'); });
-}
-
 /* ── Articles ── */
 var artPage = 1;
 var artSearchTimer = null;
@@ -530,12 +466,12 @@ function loadArticles(page) {
   if (status && status !== 'all') params.set('status', status);
   if (category && category !== 'all') params.set('category', category);
   if (search) params.set('search', search);
-  document.getElementById('art-body').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--dim)">Loading...</td></tr>';
+  document.getElementById('art-body').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--dim)">Loading...</td></tr>';
   fetch('/admin/actions/articles?' + params.toString())
     .then(function(r){return r.json();})
     .then(renderArticles)
     .catch(function(){
-      document.getElementById('art-body').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--red)">Failed to load articles</td></tr>';
+      document.getElementById('art-body').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--red)">Failed to load articles</td></tr>';
     });
 }
 var STATUS_PILLS = {
@@ -548,7 +484,7 @@ function renderArticles(data) {
   var el = document.getElementById('art-count');
   if (el) el.textContent = data.total + ' total · page ' + data.page + '/' + data.pages;
   if (!data.articles || !data.articles.length) {
-    document.getElementById('art-body').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--dim)">No articles found</td></tr>';
+    document.getElementById('art-body').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--dim)">No articles found</td></tr>';
     document.getElementById('art-pager').innerHTML = '';
     return;
   }
@@ -565,9 +501,12 @@ function renderArticles(data) {
     var resetBtn = (a.summary_status === 'failed' || a.summary_status === 'pending')
       ? '<button class="row-btn success" onclick="resetArticle('+a.id+',this)">↺</button>' : '';
     var delBtn = '<button class="row-btn danger" onclick="deleteArticle('+a.id+',this)" title="Delete">✕</button>';
+    var imgBtn = '<button class="row-btn" onclick="triggerImgUpload('+a.id+')" title="Upload/set image" style="font-size:.8rem">🖼</button>';
     var titleCell = '<a href="'+esc(a.url)+'" target="_blank" style="color:var(--text);text-decoration:none;font-weight:600">'
       + esc(a.title ? (a.title.length>70 ? a.title.slice(0,70)+'…' : a.title) : '—') + '</a>';
+    if (a.image_url) titleCell = '<img src="'+esc(a.image_url)+'" style="width:28px;height:20px;object-fit:cover;border-radius:3px;margin-right:6px;vertical-align:middle;opacity:.8"> ' + titleCell;
     if (!a.is_active) titleCell = '<span style="opacity:.4">' + titleCell + '</span>';
+    var pubAt = a.published_at ? timeAgoIso(a.published_at) : '<span style="color:var(--dim)">—</span>';
     var chkChecked = selectedArticles.has(a.id) ? ' checked' : '';
     return ['<tr id="art-row-'+a.id+'">',
       '<td style="padding:10px 6px"><input type="checkbox" class="art-chk art-row-chk" data-id="'+a.id+'"'+chkChecked+' onchange="toggleArtChk('+a.id+',this)"></td>',
@@ -575,8 +514,9 @@ function renderArticles(data) {
       '<td style="color:var(--muted);font-size:.78rem">'+esc(a.source_name||'')+'</td>',
       '<td><span class="cat-tag" style="background:'+catColor+'33;color:'+catColor+'">'+esc(catName)+'</span></td>',
       '<td>'+pill+'</td>',
+      '<td style="color:var(--dim);font-size:.75rem">'+pubAt+'</td>',
       '<td style="color:var(--dim);font-size:.75rem">'+timeAgoIso(a.fetched_at)+'</td>',
-      '<td style="display:flex;gap:4px;flex-wrap:wrap">'+activeBtn+featBtn+resetBtn+delBtn+'</td>',
+      '<td style="display:flex;gap:4px;flex-wrap:nowrap;align-items:center">'+activeBtn+featBtn+resetBtn+delBtn+imgBtn+'</td>',
       '</tr>'].join('');
   }).join('');
   // Sync select-all checkbox state
@@ -622,6 +562,24 @@ function deleteArticle(id, btn) {
     .then(function(r){return r.json();})
     .then(function(){ toast('✕ Article deleted'); loadArticles(artPage); })
     .catch(function(){ btn.disabled=false; });
+}
+
+/* ── Article image upload ── */
+var _imgUploadTarget = null;
+function triggerImgUpload(id) {
+  _imgUploadTarget = id;
+  var inp = document.getElementById('art-img-file');
+  inp.value = '';  // reset so same file can be re-selected
+  inp.click();
+}
+function doUploadArtImage(input) {
+  if (!input.files || !input.files[0] || !_imgUploadTarget) return;
+  var form = new FormData();
+  form.append('file', input.files[0]);
+  fetch('/admin/actions/articles/'+_imgUploadTarget+'/image', {method:'POST', body:form})
+    .then(function(r){ return r.json(); })
+    .then(function(d){ toast('🖼 Image set'); loadArticles(artPage); })
+    .catch(function(){ toast('Image upload failed'); });
 }
 
 /* ── Bulk select ── */
@@ -699,23 +657,36 @@ function renderCategories(cats) {
     return;
   }
   document.getElementById('cat-body').innerHTML = cats.map(function(c) {
-    var hexColor = c.color.startsWith('#') ? c.color : ('#' + (CAT_COLORS[(c.slug||'')] || '4f46e5').replace('#',''));
-    var swatchColor = c.color.startsWith('#') ? c.color : (CAT_COLORS[c.slug] || '#4f46e5');
+    var hex = c.color.startsWith('#') ? c.color : ('#' + (CAT_COLORS[c.slug] || '4f46e5').replace('#',''));
     var visBtn = c.is_visible
       ? '<button class="row-btn danger" onclick="toggleCatVisible('+c.id+',false)">Hide</button>'
       : '<button class="row-btn success" onclick="toggleCatVisible('+c.id+',true)">Show</button>';
     var delBtn = '<button class="row-btn danger" onclick="deleteCategory('+c.id+')">✕ Delete</button>';
     return ['<tr id="cat-row-'+c.id+'">',
-      '<td style="color:var(--muted);font-size:.78rem">'+esc(c.slug)+'</td>',
-      '<td><input class="edit-input" style="width:140px" value="'+esc(c.name)+'" id="cn-'+c.id+'">'
+      /* Slug — editable */
+      '<td><input class="edit-input" style="width:120px" value="'+esc(c.slug)+'" id="cs-'+c.id+'">'
+        +'<button class="row-btn success" style="margin-left:6px" onclick="saveCatSlug('+c.id+')">Save</button></td>',
+      /* Name — editable */
+      '<td><input class="edit-input" style="width:130px" value="'+esc(c.name)+'" id="cn-'+c.id+'">'
         +'<button class="row-btn success" style="margin-left:6px" onclick="saveCatName('+c.id+')">Save</button></td>',
-      '<td><span class="swatch" style="background:'+swatchColor+'"></span>'
-        +'<input class="edit-input" style="width:100px" value="'+esc(c.color)+'" id="cc-'+c.id+'">'
-        +'<button class="row-btn success" style="margin-left:4px" onclick="saveCatColor('+c.id+')">Save</button></td>',
+      /* Color — native color picker */
+      '<td style="display:flex;align-items:center;gap:6px">'
+        +'<input type="color" id="cc-'+c.id+'" value="'+hex+'" '
+        +'style="width:40px;height:28px;border:1px solid var(--border);border-radius:5px;cursor:pointer;padding:2px;background:var(--surf2)" '
+        +'onchange="liveSwatchUpdate(\'cs-swatch-'+c.id+'\',this.value)">'
+        +'<button class="row-btn success" onclick="saveCatColor('+c.id+')">Save</button>'
+        +'</td>',
       '<td>'+visBtn+'</td>',
       '<td>'+delBtn+'</td>',
       '</tr>'].join('');
   }).join('');
+}
+function liveSwatchUpdate(swatchId, color) { /* live preview — colour picker updates in-place */ }
+function saveCatSlug(id) {
+  var slug = document.getElementById('cs-'+id).value.trim().toLowerCase().replace(/\s+/g,'_');
+  if (!slug) return;
+  fetch('/admin/actions/categories/'+id, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug})})
+    .then(function(r){return r.json();}).then(function(){ toast('Slug saved'); loadCategories(); }).catch(function(){});
 }
 function saveCatName(id) {
   var name = document.getElementById('cn-'+id).value.trim();
@@ -724,7 +695,7 @@ function saveCatName(id) {
     .then(function(r){return r.json();}).then(function(){ toast('Name saved'); loadCategories(); }).catch(function(){});
 }
 function saveCatColor(id) {
-  var color = document.getElementById('cc-'+id).value.trim();
+  var color = document.getElementById('cc-'+id).value;  // returns #rrggbb from color picker
   if (!color) return;
   fetch('/admin/actions/categories/'+id, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({color:color})})
     .then(function(r){return r.json();}).then(function(){ toast('Color saved'); loadCategories(); }).catch(function(){});
@@ -741,7 +712,7 @@ function deleteCategory(id) {
 function submitNewCategory() {
   var slug  = document.getElementById('cat-slug').value.trim();
   var name  = document.getElementById('cat-name').value.trim();
-  var color = document.getElementById('cat-color').value.trim() || 'primary';
+  var color = document.getElementById('cat-color').value || '#6610f2';  // hex from color picker
   if (!slug || !name) { toast('Slug and name required'); return; }
   fetch('/admin/actions/categories', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug,name:name,color:color})})
     .then(function(r){return r.json();})
@@ -749,35 +720,41 @@ function submitNewCategory() {
       toast('✓ Category added');
       document.getElementById('cat-slug').value='';
       document.getElementById('cat-name').value='';
-      document.getElementById('cat-color').value='primary';
+      document.getElementById('cat-color').value='#6610f2';
       loadCategories();
     }).catch(function(){ toast('Error adding category'); });
 }
 
 /* ── Manage Sources ── */
 function loadManageSources() {
-  document.getElementById('msrc-body').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--dim)">Loading...</td></tr>';
+  document.getElementById('msrc-body').innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--dim)">Loading...</td></tr>';
   fetch('/admin/actions/sources').then(function(r){return r.json();}).then(renderManageSources).catch(function(){
-    document.getElementById('msrc-body').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--red)">Failed to load</td></tr>';
+    document.getElementById('msrc-body').innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--red)">Failed to load</td></tr>';
   });
 }
 function renderManageSources(sources) {
   if (!sources || !sources.length) {
-    document.getElementById('msrc-body').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--dim)">No sources</td></tr>';
+    document.getElementById('msrc-body').innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--dim)">No sources</td></tr>';
     return;
   }
   document.getElementById('msrc-body').innerHTML = sources.map(function(s) {
     var catColor = CAT_COLORS[s.category] || '#4f46e5';
     var catName  = (s.category||'').replace(/_/g,' ');
     var activeLabel = s.is_active ? '<span class="status-dot on"></span>on' : '<span class="status-dot off"></span><span style="color:var(--red)">off</span>';
-    var shortUrl = s.url ? (s.url.length>40 ? s.url.slice(0,38)+'…' : s.url) : '';
+    var shortUrl = s.url ? (s.url.length>38 ? s.url.slice(0,36)+'…' : s.url) : '';
+    var lastFetch = s.last_fetched_at ? timeAgo(s.last_fetched_at) : '<span style="color:var(--dim)">never</span>';
+    var failures = s.consecutive_failures > 0
+      ? '<span class="src-fail">'+s.consecutive_failures+'</span>'
+      : '<span class="src-ok">0</span>';
     return ['<tr id="msrc-row-'+s.id+'">',
       '<td style="font-weight:600;min-width:120px">'+esc(s.name)+'</td>',
       '<td style="font-size:.72rem;color:var(--muted)"><a href="'+esc(s.url)+'" target="_blank" style="color:var(--muted)">'+esc(shortUrl)+'</a></td>',
       '<td><span class="cat-tag" style="background:'+catColor+'33;color:'+catColor+'">'+esc(catName)+'</span></td>',
       '<td style="color:var(--dim);font-size:.74rem">'+esc(s.source_type||'rss')+'</td>',
-      '<td style="font-size:.78rem">'+activeLabel+'</td>',
       '<td style="color:var(--muted)">'+s.article_count+'</td>',
+      '<td style="color:var(--muted);font-size:.75rem">'+lastFetch+'</td>',
+      '<td>'+failures+'</td>',
+      '<td style="font-size:.78rem">'+activeLabel+'</td>',
       '<td style="display:flex;gap:4px;flex-wrap:wrap">',
         '<button class="row-btn '+(s.is_active?'danger':'success')+'" onclick="toggleMSource('+s.id+',this)">'+(s.is_active?'Disable':'Enable')+'</button>',
         '<button class="row-btn danger" onclick="deleteMSource('+s.id+')">✕</button>',
