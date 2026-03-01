@@ -531,7 +531,7 @@ xybitz/
 
 <!-- HEAD:
   - charset UTF-8, viewport meta
-  - title: "{{ page_title | default('Latest') }} — Xybitz"
+  - title: "{{ page_title | default('Latest') }} - Xybitz"
   - meta description: "CyberSec news AI-summarised to 60 words. Always current."
   - Bootstrap 5.3 CSS CDN
   - HTMX 2.x CDN
